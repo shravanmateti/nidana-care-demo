@@ -21,7 +21,8 @@ jobs:
       - name: Build
         run: python3 build.py
       - name: index.html must match the build
-        run: diff -q dist/index.html index.html || (echo "index.html is out of date: run python3 build.py and copy dist/index.html to index.html" && exit 1)
+        run: |
+          diff -q dist/index.html index.html || (echo "index.html is out of date - run python3 build.py and copy dist/index.html to index.html" && exit 1)
       - name: Fast suites
         run: node tests/run.js
       - name: Slow suite t5 (nightly only)
