@@ -1,0 +1,29 @@
+name: tests
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 3 * * *"   # nightly, also runs the slow t5 (all 31 ailment flows)
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install
+      - run: npx playwright install --with-deps chromium
+      - name: Build
+        run: python3 build.py
+      - name: index.html must match the build
+        run: diff -q dist/index.html index.html || (echo "index.html is out of date: run python3 build.py and copy dist/index.html to index.html" && exit 1)
+      - name: Fast suites
+        run: node tests/run.js
+      - name: Slow suite t5 (nightly only)
+        if: github.event_name == 'schedule'
+        run: node tests/run.js t5
