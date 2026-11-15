@@ -1,0 +1,73 @@
+/* ---------- ADMIN ---------- */
+const sumN=(a,f)=>a.reduce((t,x)=>t+(+f(x)||0),0);
+VIEWS["admin.funnel"]=()=>{
+ const m=DB.metrics,asked=new Set([...DB.leads.map(l=>l.assess),...DB.appts.map(a=>a.assess)]).size;
+ const rows=[["Started the assessment",m.started],["Finished the assessment",DB.assessments.length],["Asked for a doctor",asked],["Booked a consultation",DB.appts.length],["Consultation completed",DB.appts.filter(a=>a.status==="done").length],["Prescription issued",DB.rx.length],["Medicines ordered",new Set(DB.orders.map(o=>o.rx)).size],["Clinic treatment booked",DB.tbook.length]];
+ const cs=Object.values(DB.cases),agree=cs.filter(c=>c.agree==="yes").length,part=cs.filter(c=>c.agree==="partly").length;
+ const reach=m.reach||[];
+ return `<h2>Funnel</h2><p class="mu">These are the numbers for your Stage 0 test. Run it with about 5 doctors and 50 patients, then read this page.</p>
+ <div class="card"><table><tr><th>Step</th><th>Count</th><th>% of previous</th></tr>${rows.map((r,i)=>`<tr><td>${r[0]}</td><td><b>${r[1]}</b></td><td>${i&&rows[i-1][1]?Math.round(r[1]/rows[i-1][1]*100)+"%":"-"}</td></tr>`).join("")}</table></div>
+ <div class="card"><h3>Does the tool match the doctors?</h3><p class="kpi">${cs.length?Math.round(agree/cs.length*100)+"%":"-"}</p><p class="mu sm">${cs.length} cases reviewed · ${agree} agreed · ${part} partly · ${cs.length-agree-part} disagreed. Show this to a Vaidya before changing any scoring.</p></div>
+ <div class="card"><h3>Where people stop</h3>${reach.length?`<table><tr><th>Question</th><th>Reached it</th></tr>${Q.map((q,i)=>`<tr><td class="sm">${i+1}. ${E(q.q)}</td><td>${reach[i]||0}</td></tr>`).join("")}</table>`:`<p class="mu sm">Fills in as people use the assessment.</p>`}</div>`;
+};
+VIEWS["admin.verify"]=()=>{
+ let h=`<h2>Verification queue</h2><div class="card"><h3>Doctors</h3><table><tr><th>Doctor</th><th>Registration no.</th><th>Status</th><th></th></tr>${DB.doctors.map(d=>`<tr><td>${E(d.name)}<br><span class="mu sm">${E(d.qual)}</span></td><td class="sm">${E(d.regno)}</td><td><span class="tag ${d.reg==="verified"?"g":"a"}">${d.reg}</span></td><td>${d.reg!=="verified"?`<button class="btn s" onclick="NC.verifyDoc('${d.id}')">Mark verified</button>`:""}</td></tr>`).join("")}</table>
+ <p class="mu sm">In the real product: check the number against the state Ayurveda council register and the practitioner's telemedicine course certificate.</p></div>`;
+ if(S.stage>=2){
+  h+=`<div class="card"><h3>Suppliers</h3>${DB.suppliers.map(s=>{const miss=[!s.licence&&"licence",!s.gmp&&"GMP certificate",!s.report&&"batch test report"].filter(Boolean);
+   return `<div style="border-top:1px solid var(--ln);padding:8px 0"><b>${E(s.name)}</b> <span class="tag ${s.status==="verified"?"g":"a"}">${s.status}</span><p class="sm">Licence: ${E(s.licence||"missing")}<br>GMP: ${E(s.gmp||"missing")}<br>Batch test report: ${s.report?"provided":"missing"}</p>
+   ${s.status!=="verified"?(miss.length?`<span class="mu sm">Cannot approve. Missing: ${miss.join(", ")}.</span>`:`<button class="btn s" onclick="NC.approveSup('${s.id}')">Approve supplier</button>`):""}</div>`}).join("")}</div>
+  <div class="card"><h3>Products awaiting approval</h3>${DB.products.filter(p=>p.status==="pending").map(p=>{const sv=sup(p.sup).status==="verified";return `<div class="fl"><span class="sm" style="flex:1"><b>${E(p.name)}</b> · ${E(sup(p.sup).name)} · batch ${E(p.batch||"missing")}</span>${sv&&p.batch&&(!p.hm||p.ht)?`<button class="btn s" onclick="NC.approveProd('${p.id}')">Approve</button>`:`<span class="tag a">supplier, batch or heavy-metal assay not ready</span>`}</div>`}).join("")||`<p class="mu sm">None pending.</p>`}</div>`;
+ }
+ if(S.stage>=3){
+  h+=`<div class="card"><h3>Clinic audits</h3><table><tr><th>Clinic</th><th>Score</th><th>Status</th><th>Record audit</th></tr>${DB.clinics.map(c=>{const sa=DB.audits.filter(a=>a.clinic===c.id&&a.by==="self").slice(-1)[0];return `<tr><td class="sm">${E(c.name)}<br><span class="mu">last ${fd(c.last)}${sa?" · self-check "+sa.score+"%":""}</span></td><td>${c.score}%</td><td><span class="tag ${c.status==="audited"?"g":"w"}">${c.status}</span></td><td><div class="fl"><input id="as_${c.id}" type="number" min="0" max="100" style="width:70px" placeholder="%"><button class="btn s" onclick="NC.recordAudit('${c.id}')">Save</button></div></td></tr>`}).join("")}</table>
+  <p class="mu sm">Rule used here: 80% and above is a bookable partner, 60 to 79% is probation, below 60% is suspended. Change it to match your policy.</p></div>`;
+ }
+ return h;
+};
+function verifyDoc(id){doc(id).reg="verified";save();render()}
+function approveSup(id){sup(id).status="verified";save();render()}
+function approveProd(id){prod(id).status="approved";save();render()}
+function recordAudit(id){
+ const v=parseInt($("as_"+id).value,10);if(isNaN(v)||v<0||v>100){toast("Enter a score from 0 to 100");return}
+ const c=cli(id);c.score=v;c.last=new Date().toISOString();c.status=v>=80?"audited":v>=60?"probation":"suspended";
+ DB.audits.push({id:uid(),clinic:id,date:c.last,score:v,by:"admin"});save();toast("Audit recorded");render();
+}
+const roleOf=id=>id[0]==="d"?"doctor":id[0]==="s"?"supplier":"clinic";
+VIEWS["admin.revenue"]=()=>{
+ const st=DB.settings,done=DB.appts.filter(a=>a.status==="done");
+ const cR=sumN(done,a=>a.fee)*st.commConsult/100,oR=sumN(DB.orders,o=>o.total)*st.commOrder/100,bR=sumN(DB.tbook,b=>b.total)*st.feeBook/100,aR=DB.audits.filter(a=>a.by==="admin").length*st.auditFee;
+ const subs=Object.entries(DB.subs).map(([id,p])=>{const pl=st.plans[roleOf(id)].find(x=>x[0]===p);return pl?pl[1]:0}).reduce((a,b)=>a+b,0);
+ const rows=[["Consultation commission ("+st.commConsult+"%)",cR],["Medicine order commission ("+st.commOrder+"%)",oR],["Clinic booking fee ("+st.feeBook+"%)",bR],["Clinic audit fees",aR],["Subscriptions chosen so far (per quarter)",subs]];
+ return `<h2>Revenue</h2><div class="card"><h3>From activity in this prototype</h3><table>${rows.map(r=>`<tr><td>${r[0]}</td><td><b>${inr(r[1])}</b></td></tr>`).join("")}<tr><td><b>Total</b></td><td><b>${inr(rows.reduce((t,r)=>t+r[1],0))}</b></td></tr></table></div>
+ <div class="card"><h3>Model one quarter</h3><p class="mu sm">All inputs are guesses. The number that matters most is how many doctors pay once you bring them patients.</p>
+ <div class="grid" style="gap:8px">${[["sd","Paying doctors",50],["sc","Paying clinics",10],["ss","Paying suppliers",8],["cp","Consults per doctor",60],["fe","Average consult fee ₹",450],["no","Medicine orders",400],["ao","Average order ₹",500],["nb","Clinic bookings",300],["ab","Average booking ₹",1500]].map(x=>`<label class="sm">${x[1]}<br><input id="m_${x[0]}" type="number" value="${x[2]}" oninput="NC.sim()" style="width:100%"></label>`).join("")}</div>
+ <div id="simout" style="margin-top:10px"></div></div>`;
+};
+function sim(){
+ const v=k=>parseFloat($("m_"+k).value)||0,st=DB.settings;
+ const dp=st.plans.doctor[1][1],cp=st.plans.clinic[0][1],sp=st.plans.supplier[0][1];
+ const subs=v("sd")*dp+v("sc")*cp+v("ss")*sp;
+ const com=v("sd")*v("cp")*v("fe")*st.commConsult/100+v("no")*v("ao")*st.commOrder/100+v("nb")*v("ab")*st.feeBook/100;
+ const tot=subs+com;
+ $("simout").innerHTML=`<table><tr><td>Subscriptions (doctor Pro, clinic Partner, supplier Listing)</td><td><b>${inr(subs)}</b></td></tr><tr><td>Commissions and booking fees</td><td><b>${inr(com)}</b></td></tr><tr><td><b>Quarter total</b></td><td><b>${inr(tot)}</b></td></tr></table><p class="mu sm">${tot?Math.round(subs/tot*100):0}% of revenue comes from subscriptions. Activity-based income grows with patients, which is why it comes first.</p>`;
+}
+VIEWS["admin.settings"]=()=>{
+ const st=DB.settings;
+ return `<h2>Settings</h2><div class="card"><h3>Fees</h3><div class="grid" style="gap:8px">${[["commConsult","Consultation commission %"],["commOrder","Medicine order commission %"],["feeBook","Clinic booking fee %"],["auditFee","Audit fee per clinic ₹"]].map(x=>`<label class="sm">${x[1]}<br><input id="st_${x[0]}" type="number" value="${st[x[0]]}"></label>`).join("")}</div><button class="btn s" style="margin-top:8px" onclick="NC.saveSettings()">Save</button></div>
+ <div class="card"><h3>Reset prototype</h3><p class="mu sm">Clears all sample activity and restores the starting data.</p><button class="btn g s" onclick="NC.resetAll()">Reset all data</button></div>
+ <div class="card"><h3>What this prototype does not do</h3><ul class="sm"><li>No real accounts, payments, video calls or messages.</li><li>No data leaves this browser except the WhatsApp or copy action the patient chooses.</li><li>All doctors, clinics, suppliers, licence numbers and prices are made-up samples.</li><li>The assessment weights and the audit checklist need review by a registered Vaidya and a lawyer before real use.</li></ul></div>`;
+};
+function saveSettings(){["commConsult","commOrder","feeBook","auditFee"].forEach(k=>{const v=parseFloat($("st_"+k).value);if(!isNaN(v)&&v>=0)DB.settings[k]=v});save();toast("Saved")}
+function resetAll(){try{localStorage.removeItem(LS)}catch(e){}ALS_st.id=null;ALS_st.ans={};ALS_st.i=0;DB=seed();S.role="patient";S.tab="assess";S.caseId=null;try{ans=Q.map(()=>[]);window._gateOpen=false}catch(e){}startedThisRun=false;toast("Reset");render()}
+window.onAssessmentStep=n=>{
+ const m=DB.metrics;m.reach=m.reach||[];
+ if(n===0&&!startedThisRun0){startedThisRun0=true;maxReach=-1}
+ if(n>maxReach){for(let k=maxReach+1;k<=n;k++)m.reach[k]=(m.reach[k]||0)+1;maxReach=n;save()}
+};
+let maxReach=-1,startedThisRun0=false;
+VIEWS["admin.cat"]=()=>catView(DB,inr);
+const _done=window.onAssessmentDone;window.onAssessmentDone=s=>{_done(s);startedThisRun0=false;maxReach=-1;
+ const m=DB.metrics;m.reach=m.reach||[];if(Q.length){m.reach[Q.length]=(m.reach[Q.length]||0)}save()};
+return {get DB(){return DB},nextGo,render,setRole,setTab,setStage,goto,setCtx,reqLead,pickSlot,confirmBook,placeOrder,bookClinic,logFollow,setRemind,bookReview,openCase,closeCase,dr,drTest,drAddMed,drDelMed,pickAgree,drOtherTest,drAddTreat,drDelTreat,issueRx,markLead,pickPlan,submitSup,addProduct,setOrder,setBooking,saveAudit,verifyDoc,approveSup,approveProd,recordAudit,saveSettings,resetAll,sim};
+})();

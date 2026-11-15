@@ -1,0 +1,61 @@
+:root{--no:#fff4dc;--nt:#6b4a00;--ok:#2f6b3a;--okb:#e3f1e5}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--no:#3a3220;--nt:#f2d58a;--ok:#8fd49b;--okb:#1f3324}}
+body{font-size:15px}
+.wrap{max-width:980px;margin:0 auto;padding:0 14px 60px}
+.top{position:sticky;top:0;z-index:5;background:var(--bg);padding:10px 0 6px;border-bottom:1px solid var(--ln)}
+.brand{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.brand b{font-family:"Iowan Old Style",Georgia,serif;font-size:19px;color:var(--ac)}
+.badge{font-size:12px;background:var(--no);color:var(--nt);padding:3px 9px;border-radius:12px}
+.pills{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 0}
+.pills button,.stg button{background:var(--sf);border:1.5px solid var(--ln);border-radius:20px;padding:5px 12px;font-size:13px}
+.pills button.on,.stg button.on{background:var(--ac);color:var(--sf);border-color:var(--ac)}
+.pills button.lk{opacity:.5}
+.stg{display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-top:8px;font-size:13px;color:var(--mu)}
+select,input,textarea{font:inherit;font-size:14px;padding:7px 9px;border-radius:8px;border:1.5px solid var(--ln);background:var(--sf);color:var(--tx);max-width:100%}
+textarea{width:100%;min-height:60px}
+.note{background:var(--no);color:var(--nt);border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:14px}.note b{display:block;margin-bottom:3px}
+.good{background:var(--okb);color:var(--ok);border-radius:12px;padding:10px 14px;margin-bottom:12px;font-size:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
+.grid .card{margin:0}
+.kpi{font-size:26px;font-weight:700;color:var(--ac);font-family:Georgia,serif}
+.sm{font-size:13px}.r{float:right}
+.tag.w{background:var(--wb);color:var(--wa)}.tag.g{background:var(--okb);color:var(--ok)}.tag.a{background:var(--no);color:var(--nt)}
+table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;padding:7px 6px;border-bottom:1px solid var(--ln);vertical-align:top}th{color:var(--mu);font-weight:600;font-size:13px}
+.btn.s{flex:none;padding:7px 12px;font-size:13px;border-radius:8px}
+.chips button{background:var(--bg);border:1.5px solid var(--ln);border-radius:8px;padding:5px 10px;margin:0 6px 6px 0;font-size:13px}
+.chips button.on{background:var(--ac);color:var(--sf);border-color:var(--ac)}
+.lock{opacity:.85;border-style:dashed}
+.fl{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0}
+label.ck{display:flex;gap:8px;align-items:flex-start;margin:6px 0;font-size:14px}label.ck input{margin-top:4px}
+#toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--tx);color:var(--bg);padding:9px 16px;border-radius:20px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .25s;z-index:20}
+#toast.on{opacity:1}
+.intake{max-width:640px;margin:0 auto}
+@media(max-width:560px){.r{float:none;display:block;margin-top:6px}table{font-size:13px}}
+
+.lnk{background:none;border:0;color:var(--ac);text-decoration:underline;font:inherit;padding:0;cursor:pointer}
+
+.stg{display:block;margin-top:8px;font-size:13px;color:var(--mu)}
+.stg summary{cursor:pointer;padding:2px 0}
+.stg .stgb{display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-top:6px}
+.nxt{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:#e4efe8;border:1.5px solid var(--ac);border-radius:12px;padding:10px 12px;margin-top:12px;font-size:14px}
+.err{color:#8a2b22;background:#f7e2de;border-radius:8px;padding:6px 10px;font-size:13px;margin:8px 0}
+details.card summary{cursor:pointer}
+@media(max-width:700px){.top{position:static}
+.wrap{padding:0 12px 60px}
+button,select,.pills button,.stg button,.chips button,.tabs button{min-height:44px}
+.btn.s{min-height:44px;padding:9px 14px}
+.stg summary{padding:10px 0;min-height:44px;display:flex;align-items:center}
+details.card summary{padding:8px 0;min-height:44px}
+input[type=checkbox],input[type=radio]{width:22px;height:22px;min-height:0}
+label.ck{padding:4px 0}
+select,input,textarea{font-size:16px;min-height:44px}
+.pills,.stgb{gap:8px}
+table.stk,table.stk tbody,table.stk tr,table.stk td{display:block;width:100%}
+table.stk tr:first-child{display:none}
+table.stk tr{padding:10px 0;border-bottom:1px solid var(--ln)}
+table.stk td{border:0;padding:3px 0}
+table.stk td[data-l]:before{content:attr(data-l);display:block;font-size:12px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.03em}
+table.stk td:empty{display:none}
+.card{padding:14px}
+.nxt .btn{width:100%}
+}
