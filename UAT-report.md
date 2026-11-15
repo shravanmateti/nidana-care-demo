@@ -1,0 +1,88 @@
+# Nidana Care: UAT test report
+
+Date: 15 Nov 2026 · Build tested: `index.html` after the mobile-polish changes · Method: automated Playwright runs (Chromium, 390px phone and 1280px desktop) acting as each of the five roles.
+
+> This is a scripted walkthrough of a prototype with sample data. It is not a test with real users, real devices or a screen reader, and it is not a clinical or legal review.
+
+## 1. Summary
+
+| Area | Result |
+|---|---|
+| Existing suites t2–t8 (about 120 checks, including all 31 ailment flows) | All pass after one fix (see 2) |
+| New per-role UAT script (37 checks, 5 roles) | 31 pass · 4 were mistakes in my script · 2 are real gaps |
+| Console / JS errors across every role and tab, phone and desktop | None |
+| Horizontal scroll on any tab at 390px | None |
+| Runs with browser storage blocked | Yes, still renders |
+| Catalogue render time (37 products, 18 treatments) | About 6 ms |
+| Script injection through a product name | Blocked (text is escaped) |
+
+**Overall:** the core loop (patient → doctor → medicines → clinic → follow-up) works for every role and the built-in safety rules hold. The remaining weaknesses are enforcement (rules live in the screen, not in the logic), page length on phones, a few accessibility gaps, and the lack of real-user evidence.
+
+## 2. A regression I caused, now fixed
+
+Stacking tables on phones hid each table's header row with `display:none`. That removed the column names from the page's text, and `t2` ("follow-up chart/table") failed on it. A screen reader would also have lost the headers.
+
+Fix: the header row is now visually hidden but still readable, and the stacked tables carry table, row and cell roles. `t2` and `t7` now pass.
+
+## 3. Results by role
+
+### Patient
+- Assessment picker, hair-fall flow, non-hair flow (summary only, no dosha score), pregnancy caution, next-step bar, booking, medicine order, clinic booking and follow-up log all work (t2, t3, t4, t5, t7 and the new script).
+- Only verified doctors can be booked. The pending doctor is listed as "Registration under verification" with no slots.
+- State survives a reload.
+- Gap: the new questions are English only, and the hair flow's other languages were not tested.
+
+### Doctor
+- Case sheet shows answers, red flags, cautions and tests advised for the ailment. A prescription cannot be issued until Agree, Partly or Disagree is chosen.
+- Herbs are hidden and the doctor sees a note when pregnancy, a medicine or a thyroid disorder is reported (t3). Shodhana procedures are disabled when pregnancy is reported (t6).
+- Not conclusively tested: whether a medicine can be added with a blank dose. My check did not prove it either way.
+- The case sheet is about 2,700px tall on a phone.
+
+### Supplier
+- The form rejects a missing batch number, a herbo-mineral without an assay tick, and a negative price. A valid herbo-mineral becomes "pending".
+- **Gap:** "heavy-metal assay on file" is only a tick box. No document, lab name, lot or date is captured.
+- 4 form fields have no label (placeholder only).
+- The Products tab is about 4,350px tall on a phone.
+
+### Clinic
+- Bookings, audit and plan tabs work. A booked treatment can be marked done.
+- **Gap:** "Save self-audit" with nothing ticked saves a 0% score with no warning or confirmation.
+
+### Admin
+- Verification works. Scores above 100 and non-numeric scores are rejected. A score of 55 suspends the clinic. Funnel, revenue, simulator, settings and reset all work.
+- **Gap:** the rule "no approval of herbo-mineral products without an assay" is enforced only by hiding the button. The approve function itself has no check.
+- 3 verification fields have no label. The Verification tab is about 3,150px tall on a phone.
+
+## 4. Recommended changes, how to do them, and what they give you
+
+Effort: S under half a day, M 1–3 days, L a week or more. Order is by value for the next step (user testing, then real use).
+
+| # | Change | How to approach it | Impact | Effort |
+|---|---|---|---|---|
+| 1 | Enforce safety rules in the logic, not only the screen | Put the herbo-mineral assay check inside `approveProd`, the shodhana check inside the prescribing function, and the pregnancy check inside the order function. Add a test for each that calls the function directly. | A future screen change or a real backend cannot quietly drop a safety rule. Largest risk reduction for the least work. | S |
+| 2 | Capture real assay evidence | Replace the tick box with lab name, report number, test date and a file or link. Admin sees these before approving and can reject. | Turns the heavy-metal rule from a promise into something an auditor can check. Needed before real supplier onboarding. | M |
+| 3 | Confirm before saving an empty or low self-audit | Disable the button until at least one item is ticked, and ask for confirmation under a set score. | Prevents accidental 0% records and bad data in the audit history. | S |
+| 4 | Shorten the long phone pages | Collapse sections by default on phones (doctor case sheet sections 4 and 5, supplier product list, admin verification groups), the same way the Catalogue now works. Keep a sticky "Issue prescription" bar. | Less scrolling for doctors using phones, and fewer abandoned case sheets. | M |
+| 4b | Keep the Catalogue open/closed state when the filter changes | Store the open state in `S` and restore it after render. | Removes a small annoyance when filtering. | S |
+| 5 | Label every field and enlarge links | Add `<label>` or `aria-label` to the 7 unlabelled fields. Pad inline source links to 44px on phones. | Usable with a screen reader and easier to tap, which matters for older patients. | S |
+| 6 | Add automated checks to GitHub | Add a `package.json` with Playwright and a GitHub Actions workflow that runs `build.py`, then t2–t8 on every push. Run the slow t5 nightly. | Catches regressions like the table-header one before they are published. | S–M |
+| 7 | Run real-user tests | 5 patients, 3 Ayurveda doctors, 1 clinic owner, 1 supplier. Give each a task, record where they hesitate, and fix the top 5 issues. Use the funnel page to see where people stop. | The only way to find what the scripts cannot: wording, trust, language. Drives every later priority. | M |
+| 8 | Language support for the new flows | Move question text into a translation table. Start with Hindi plus one regional language chosen from your first users. | Opens the product to patients who do not read English. | L |
+| 9 | Real accounts and roles | Separate logins, server-side permissions, audit trail. This is a rebuild step, not a patch. | Required for any real use. Removes the demo role switcher. | L |
+| 10 | Clinician and legal review | A Vaidya reviews content and the "Tests advised" sets. A lawyer reviews telemedicine rules, e-prescription, drug sale and data protection. | Gates real use. Also fills the thin-source areas (acne, pigmentation, hives, vitiligo, PCOS and others). | L (mostly waiting) |
+
+## 5. Not covered, so treat as unknown
+
+- Real phones and Safari. I used Chromium at phone width.
+- Screen readers, keyboard-only use and colour contrast.
+- Slow networks and very old devices.
+- Whether people understand the wording. This needs the user tests in item 7.
+- Anything that needs a server, since there is none.
+
+## 6. How to re-run
+
+```bash
+cd nidana-care-demo
+npm i playwright --no-save && npx playwright install chromium
+python3 build.py && node tests/t7.js   # t2 t3 t4 t6 t8, and t5 (slow)
+```
