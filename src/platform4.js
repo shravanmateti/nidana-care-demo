@@ -20,7 +20,7 @@ VIEWS["admin.verify"]=()=>{
   fold("ad_prod","Products awaiting approval ("+DB.products.filter(p=>p.status==="pending").length+")",`${DB.products.filter(p=>p.status==="pending").map(p=>{const sv=sup(p.sup).status==="verified";return `<div class="fl"><span class="sm" style="flex:1"><b>${E(p.name)}</b> · ${E(sup(p.sup).name)} · batch ${E(p.batch||"missing")}${p.hm?`<br>Heavy-metal assay: ${p.assay?E(p.assay.lab)+", report "+E(p.assay.no)+", "+E(p.assay.date):(p.ht?"declared, no details on file":"missing")}`:""}</span>${sv&&p.batch&&(!p.hm||p.ht)?`<button class="btn s" onclick="NC.approveProd('${p.id}')">Approve</button>`:`<span class="tag a">supplier, batch or heavy-metal assay not ready</span>`}<input id="rj_${p.id}" placeholder="Reason to reject" aria-label="Reason to reject ${E(p.name)}" style="flex:1;min-width:140px"><button class="btn g s" onclick="NC.rejectProd('${p.id}')">Reject</button></div>`}).join("")||`<p class="mu sm">None pending.</p>`}`,DB.products.some(p=>p.status==="pending"));
  }
  if(S.stage>=3){
-  h+=fold("ad_aud","Clinic audits",`<table><tr><th>Clinic</th><th>Score</th><th>Status</th><th>Record audit</th></tr>${DB.clinics.map(c=>{const sa=DB.audits.filter(a=>a.clinic===c.id&&a.by==="self").slice(-1)[0];return `<tr><td class="sm">${E(c.name)}<br><span class="mu">last ${fd(c.last)}${sa?" · self-check "+sa.score+"%":""}</span></td><td>${c.score}%</td><td><span class="tag ${c.status==="audited"?"g":"w"}">${c.status}</span></td><td><div class="fl"><input id="as_${c.id}" type="number" min="0" max="100" style="width:70px" placeholder="%"><button class="btn s" onclick="NC.recordAudit('${c.id}')">Save</button></div></td></tr>`}).join("")}</table>
+  h+=fold("ad_aud","Clinic audits",`<table><tr><th>Clinic</th><th>Score</th><th>Status</th><th>Record audit</th></tr>${DB.clinics.map(c=>{const sa=DB.audits.filter(a=>a.clinic===c.id&&a.by==="self").slice(-1)[0];return `<tr><td class="sm">${E(c.name)}<br><span class="mu">last ${lastTxt(c)}${sa?" · self-check "+sa.score+"%":""}</span></td><td>${c.score}%</td><td><span class="tag ${c.status==="audited"?"g":"w"}">${c.status}</span></td><td><div class="fl"><input id="as_${c.id}" type="number" min="0" max="100" style="width:70px" placeholder="%"><button class="btn s" onclick="NC.recordAudit('${c.id}')">Save</button></div></td></tr>`}).join("")}</table>
   <p class="mu sm">Rule used here: 80% and above is a bookable partner, 60 to 79% is probation, below 60% is suspended. Change it to match your policy.</p>`,false);
  }
  return h;
@@ -64,15 +64,68 @@ VIEWS["admin.settings"]=()=>{
  <div class="card"><h3>What this prototype does not do</h3><ul class="sm"><li>No real accounts, payments, video calls or messages.</li><li>No data leaves this browser except the WhatsApp or copy action the patient chooses.</li><li>All doctors, clinics, suppliers, licence numbers and prices are made-up samples.</li><li>The assessment weights and the audit checklist need review by a registered Vaidya and a lawyer before real use.</li></ul></div>`;
 };
 function saveSettings(){["commConsult","commOrder","feeBook","auditFee"].forEach(k=>{const v=parseFloat($("st_"+k).value);if(!isNaN(v)&&v>=0)DB.settings[k]=v});save();toast("Saved")}
-function resetAll(){try{localStorage.removeItem(LS)}catch(e){}ALS_st.id=null;ALS_st.ans={};ALS_st.i=0;DB=seed();S.role="patient";S.tab="assess";S.caseId=null;try{ans=Q.map(()=>[]);window._gateOpen=false}catch(e){}startedThisRun=false;toast("Reset");render()}
+function resetAll(){const ss=DB.session;try{localStorage.removeItem(LS)}catch(e){}ALS_st.id=null;ALS_st.ans={};ALS_st.i=0;DB=seed();DB.session=ss;S.role="admin";S.tab="settings";S.caseId=null;try{ans=Q.map(()=>[]);window._gateOpen=false}catch(e){}startedThisRun=false;toast("Reset");render()}
 window.onAssessmentStep=n=>{
  const m=DB.metrics;m.reach=m.reach||[];
  if(n===0&&!startedThisRun0){startedThisRun0=true;maxReach=-1}
  if(n>maxReach){for(let k=maxReach+1;k<=n;k++)m.reach[k]=(m.reach[k]||0)+1;maxReach=n;save()}
 };
 let maxReach=-1,startedThisRun0=false;
+/* ---------- admin: onboarding new suppliers and clinics ---------- */
+const lastTxt=c=>c.status==="pending"?"not audited yet":fd(c.last);
+const tmpPw=()=>"Nc"+Math.random().toString(36).slice(2,8)+Math.floor(10+Math.random()*89);
+const val=id=>(($(id)||{}).value||"").trim();
+function mkLogin(role,ref,name,email){const pw=tmpPw();DB.users.push({id:uid(),role,ref,name,email,ph:hpw(email,pw),since:new Date().toISOString()});S.cred={role,name,email,pw}}
+function obCheck(email,phone){
+ if(!okEmail(email))return "Enter a valid contact email.";
+ if(DB.users.some(u=>u.email===email))return "An account with this email already exists.";
+ if(!okPhone(phone))return "Enter a valid contact phone number (8 to 15 digits).";
+ return "";
+}
+function onboardSup(){
+ const n=val("ob_sn"),c=val("ob_sc"),e=val("ob_se").toLowerCase(),ph=val("ob_sp"),st=val("ob_ss"),l=val("ob_sl"),g=val("ob_sg"),r=!!($("ob_sr")||{}).checked;
+ if(n.length<3){toast("Enter the supplier's company name");return}
+ if(c.length<2){toast("Enter the contact person's name");return}
+ const er=obCheck(e,ph);if(er){toast(er);return}
+ if(l.length<5){toast("Enter the drug manufacturing licence number");return}
+ if(DB.suppliers.some(x=>x.licence&&x.licence.toLowerCase()===l.toLowerCase())){toast("A supplier with this licence number is already on file");return}
+ if(DB.suppliers.some(x=>x.name.toLowerCase()===n.toLowerCase())){toast("A supplier with this name is already on file");return}
+ const id="s"+uid();DB.suppliers.push({id,name:n,licence:l,gmp:g,report:r,status:"pending",contact:c,email:e,phone:ph,state:st,since:new Date().toISOString()});
+ mkLogin("supplier",id,n,e);save();toast("Supplier onboarded. Verification is pending.");S.fold.ad_sup=true;render()
+}
+function onboardClinic(){
+ const n=val("ob_cn"),city=val("ob_cc"),st=val("ob_cs"),rg=val("ob_cr"),dn=val("ob_cd"),dr=val("ob_cp"),e=val("ob_ce").toLowerCase(),ph=val("ob_cph"),ad=val("ob_ca");
+ if(n.length<3){toast("Enter the clinic name");return}
+ if(city.length<2){toast("Enter the city");return}
+ if(rg.length<5){toast("Enter the state clinic registration number");return}
+ if(dn.length<3||dr.length<4){toast("Enter the BAMS physician in charge and their registration number");return}
+ const er=obCheck(e,ph);if(er){toast(er);return}
+ if(DB.clinics.some(x=>x.regno&&x.regno.toLowerCase()===rg.toLowerCase())){toast("A clinic with this registration number is already on file");return}
+ const treat={};let bad=false;Object.keys(PROC_INFO).forEach((t,i)=>{if(($("obt_"+i)||{}).checked){const pr=parseInt(val("obp_"+i),10);if(!(pr>0&&pr<=100000))bad=true;else treat[t]=pr}});
+ if(bad){toast("Give each ticked treatment a price between 1 and 100000");return}
+ if(!Object.keys(treat).length){toast("Tick at least one treatment the clinic offers");return}
+ const id="c"+uid();DB.clinics.push({id,name:n,city,state:st,regno:rg,physician:dn,physReg:dr,email:e,phone:ph,address:ad,treat,score:0,last:new Date().toISOString(),status:"pending",since:new Date().toISOString()});
+ mkLogin("clinic",id,n,e);save();toast("Clinic onboarded. Record an audit before it can take bookings.");S.fold.ad_aud=true;render()
+}
+VIEWS["admin.onboard"]=()=>{
+ const cr=S.cred,pendS=DB.suppliers.filter(x=>x.status==="pending").length,pendC=DB.clinics.filter(x=>x.status==="pending").length;
+ const f=(id,l,ph,t)=>`<label class="sm">${l}<br><input id="${id}" ${t?`type="${t}"`:""} placeholder="${E(ph||l)}"></label>`;
+ const procs=Object.keys(PROC_INFO).map((t,i)=>`<div class="fl"><label class="ck" style="flex:1"><input type="checkbox" id="obt_${i}"><span>${E(t)}</span></label><input id="obp_${i}" type="number" min="1" max="100000" placeholder="Price ₹" aria-label="Price for ${E(t)}" style="width:96px"></div>`).join("");
+ return `<h2>Onboarding</h2><p class="mu sm">Add a new supplier or clinic. Each gets a login and then goes through verification or audit before it can sell or take bookings. ${pendS} supplier${pendS===1?"":"s"} and ${pendC} clinic${pendC===1?"":"s"} awaiting verification.</p>
+ ${cr?`<div class="good" role="status"><b>Login created for ${E(cr.name)}.</b><br>Email: ${E(cr.email)}<br>Temporary password: <b>${E(cr.pw)}</b><br><span class="sm">Share this with them now. It is not shown again.</span><br><button class="btn g s" onclick="NC.dismissCred()">Done, hide it</button></div>`:""}
+ ${fold("ob_sup","Onboard a supplier",`<div class="grid" style="gap:8px">${f("ob_sn","Company name")}${f("ob_sc","Contact person")}${f("ob_se","Contact email","name@company.com","email")}${f("ob_sp","Contact phone","","tel")}${f("ob_ss","State")}${f("ob_sl","Drug manufacturing licence number")}${f("ob_sg","GMP certificate details (optional now)","Certificate and valid-to date")}</div>
+  <label class="ck"><input type="checkbox" id="ob_sr"><span>Batch test report received (optional now)</span></label>
+  <p class="mu sm">The licence number is required. Missing documents keep the supplier in the verification queue until they are provided.</p>
+  <button class="btn" onclick="NC.onboardSup()">Onboard supplier</button>`,true)}
+ ${fold("ob_cli","Onboard a clinic",`<div class="grid" style="gap:8px">${f("ob_cn","Clinic name")}${f("ob_cc","City")}${f("ob_cs","State")}${f("ob_cr","State clinic registration number")}${f("ob_cd","BAMS physician in charge")}${f("ob_cp","Physician registration number")}${f("ob_ce","Contact email","name@clinic.com","email")}${f("ob_cph","Contact phone","","tel")}${f("ob_ca","Address (optional)")}</div>
+  <p class="sm" style="margin-top:8px"><b>Treatments offered and prices</b></p>${procs}
+  <p class="mu sm">A new clinic cannot take bookings until you record an SOP audit scoring 80% or more under Verification.</p>
+  <button class="btn" onclick="NC.onboardClinic()">Onboard clinic</button>`,false)}
+ ${fold("ob_list","Onboarded logins ("+DB.users.filter(u=>u.role==="supplier"||u.role==="clinic").length+")",`<table><tr><th>Name</th><th>Role</th><th>Email</th></tr>${DB.users.filter(u=>u.role==="supplier"||u.role==="clinic").map(u=>`<tr><td class="sm">${E(u.name)}</td><td class="sm">${E(roleName(u.role))}</td><td class="sm">${E(u.email)}</td></tr>`).join("")}</table>`,false)}`;
+};
+function dismissCred(){S.cred=null;render()}
 VIEWS["admin.cat"]=()=>catView(DB,inr);
 const _done=window.onAssessmentDone;window.onAssessmentDone=s=>{_done(s);startedThisRun0=false;maxReach=-1;
  const m=DB.metrics;m.reach=m.reach||[];if(Q.length){m.reach[Q.length]=(m.reach[Q.length]||0)}save()};
-return {get DB(){return DB},foldSet,rejectProd,nextGo,render,setRole,setTab,setStage,goto,setCtx,reqLead,pickSlot,confirmBook,placeOrder,bookClinic,logFollow,setRemind,bookReview,openCase,closeCase,dr,drTest,drAddMed,drDelMed,pickAgree,drOtherTest,drAddTreat,drDelTreat,issueRx,markLead,pickPlan,submitSup,addProduct,setOrder,setBooking,saveAudit,verifyDoc,approveSup,approveProd,recordAudit,saveSettings,resetAll,sim};
+return {get DB(){return DB},authTab,doLogin,doRegister,demoMode,logout,onboardSup,onboardClinic,dismissCred,foldSet,rejectProd,nextGo,render,setRole,setTab,setStage,goto,setCtx,reqLead,pickSlot,confirmBook,placeOrder,bookClinic,logFollow,setRemind,bookReview,openCase,closeCase,dr,drTest,drAddMed,drDelMed,pickAgree,drOtherTest,drAddTreat,drDelTreat,issueRx,markLead,pickPlan,submitSup,addProduct,setOrder,setBooking,saveAudit,verifyDoc,approveSup,approveProd,recordAudit,saveSettings,resetAll,sim};
 })();

@@ -27,6 +27,7 @@ function testsFor(aid){
  const m={"Skin":["Complete blood count","TSH","Skin check by a dermatologist"],"Digestive":["Haemoglobin","Stool examination","Liver function tests","H. pylori test"],"Metabolic":["Fasting glucose","HbA1c","Lipid profile","TSH"],"Joints and muscles":["ESR and CRP","Uric acid","Vitamin D","X-ray of the affected area"],"Mental wellness":["TSH","Vitamin B12","Haemoglobin"],"Women's health":["Haemoglobin","TSH","Pelvic ultrasound","Prolactin"],"Lifestyle and preventive care":["Fasting glucose","Lipid profile","Complete blood count"]};
  return m[g]||["Complete blood count","TSH"];
 }
+window._testsFor=testsFor;
 function drTest(t,on){const a=S.draft.tests;const i=a.indexOf(t);if(on&&i<0)a.push(t);if(!on&&i>=0)a.splice(i,1)}
 function drAddMed(){
  const pid=$("mp").value,dose=$("md").value.trim(),q=parseInt($("mq").value,10)||1;
@@ -128,7 +129,7 @@ function setBooking(id){DB.tbook.find(b=>b.id===id).status="done";save();render(
 VIEWS["clinic.audit"]=()=>{
  const c=cli(S.cli),hist=DB.audits.filter(a=>a.clinic===c.id).slice().reverse();
  const due=addDays(c.last,90),over=new Date(due)<new Date();
- return `<h2>SOP audit</h2><div class="card"><h3>Status: ${c.status} · ${c.score}%</h3><p class="sm">Last audit ${fd(c.last)} · next due ${fd(due)} ${over?'<span class="tag w">overdue</span>':""}</p></div>
+ return `<h2>SOP audit</h2><div class="card"><h3>Status: ${c.status} · ${c.score}%</h3><p class="sm">${c.status==="pending"?"No audit yet. Ask the admin to record your first SOP audit. Until then patients cannot book this clinic.":`Last audit ${fd(c.last)} · next due ${fd(due)} ${over?'<span class="tag w">overdue</span>':""}`}</p></div>
  <div class="note"><b>Sample checklist</b>Replace these items with the exact AYUSH and state requirements your advisers confirm. Admin records the official audit score. This self-check is for preparation.</div>
  <div class="card"><h3>Self-audit</h3>${AUDIT.map((t,i)=>`<label class="ck"><input type="checkbox" class="ack" onchange="document.getElementById('acn').textContent=document.querySelectorAll('.ack:checked').length+' of '+document.querySelectorAll('.ack').length+' ticked'"><span>${E(t)}</span></label>`).join("")}<p class="mu sm" id="acn">0 of ${AUDIT.length} ticked</p><button class="btn s" onclick="NC.saveAudit()">Save self-audit</button></div>
  <div class="card"><h3>History</h3><table><tr><th>Date</th><th>By</th><th>Score</th></tr>${hist.map(a=>`<tr><td>${fd(a.date)}</td><td>${a.by}</td><td>${a.score}%</td></tr>`).join("")||"<tr><td colspan=3>None yet</td></tr>"}</table></div>`;

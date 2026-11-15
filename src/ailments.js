@@ -297,28 +297,98 @@ function alGo(n){ALS_st.i=n;if(window.onAssessmentStep)window.onAssessmentStep(n
 function alPick(j){const q=alSteps()[ALS_st.i];let a=ALS_st.ans[ALS_st.i]||[];const neg=t=>/^(None|No regular|Nothing|No$)/.test(t);
  if(!q.m)a=[j];else if(neg(q.o[j].t))a=[j];else{a=a.filter(x=>!neg(q.o[x].t));a=a.includes(j)?a.filter(x=>x!==j):[...a,j]}
  ALS_st.ans[ALS_st.i]=a;alDraw()}
+/* ---------- detailed analysis for every non-hair ailment ----------
+   Built only from the patient's own answers plus general classical principles. No dosha score is invented:
+   the doctor decides the pattern. Wording stays tentative and is not yet reviewed by a registered Vaidya. */
+const ALN_CAUSE={
+ "Frequent fried, very spicy or oily food":["Heavy, oily or very spicy food","Classical texts list food that is heavy, oily or very hot among the causes that strain digestion (Ahara nidana)."],
+ "Frequent sour or fermented food (curd, pickles)":["Frequent sour or fermented food","Sour and fermented food eaten often is listed among dietary causes that can disturb digestion and the blood and skin tissues (Ahara nidana)."],
+ "Often combine incompatible foods (for example fish with milk)":["Incompatible food combinations","Viruddha ahara (incompatible food such as fish with milk) is named in the CCRAS skin guidelines as a classical cause."],
+ "Irregular meal times, or eating before the last meal is digested":["Irregular meals or eating before digestion","Eating at irregular times or before the last meal has digested (Vishamashana, Adhyashana) is said to weaken Agni, the digestive fire."],
+ "Sleep late at night":["Late-night sleep","Staying awake late (Ratri jagarana) is a classical Vihara nidana that can unsettle digestion and the nervous system."],
+ "Sleep in the daytime":["Daytime sleep","Sleeping in the daytime (Divaswapna) is a classical Vihara nidana linked with heaviness and sluggish digestion."],
+ "Often hold back natural urges (urine, stool, thirst, sleep)":["Holding back natural urges","Suppressing natural urges (Vegadharana) is a classical cause of many complaints."],
+ "Little physical activity":["Little physical activity","Lack of regular exercise (Avyayama) is listed as a cause of heaviness, sluggish digestion and weight gain."],
+ "Long exposure to heat or sun":["Long exposure to heat or sun","Prolonged heat exposure is a classical aggravating factor, especially for skin, eyes and blood."]
+};
+const ALN_SMP=[
+ "Classical texts describe skin conditions as arising when diet, routine or other causes disturb the body's balance, weaken Agni and affect the deeper tissues (Rasa, Rakta, Mamsa, Lasika). Which dosha leads in your case is for your Vaidya to decide after examining you.",
+ "Hair and scalp conditions are described as arising when poor nourishment of the deeper tissues, disturbed digestion or heat in the body reach the scalp. Your Vaidya confirms the pattern.",
+ "Agni, the digestive fire, is central here. When meals are irregular or heavy, digestion is incomplete and Ama (undigested residue) can form. Classical texts treat this as the starting point of many digestive complaints. Your Vaidya decides which pattern applies.",
+ "Classical texts describe weight and sugar problems as excess nourishment combined with low activity and slow digestion, which builds up Meda (fat tissue) and clogs the channels. Your Vaidya decides the pattern and how far it has progressed.",
+ "Joint and muscle pain is described as arising when Vata is disturbed in the joints, sometimes together with Ama. Whether Ama is involved changes the approach, and that is for your Vaidya to judge.",
+ "Classical texts link mind and sleep problems to disturbed Manas (mind) and Vata, aggravated by stress, irregular routine and poor sleep. Your Vaidya assesses mind and body together.",
+ "Menstrual and hormonal conditions are described through Artava (menstrual tissue) and its channels, with digestion and tissue nourishment playing a part. Modern sources add hormonal and metabolic causes that need tests. Your Vaidya decides the pattern.",
+ "Classical texts describe health as kept by a daily routine (Dinacharya) and seasonal routine (Ritucharya) that fit the person and the season. Your Vaidya adapts the routine to your body."
+];
+const ALN_NEUTRAL=/^(None|No$|No,|Not sure|Nothing|Not at all|No regular)/;
+function alAnalyse(ail,st){
+ const sels=st.map((q,n)=>({q,o:(ALS_st.ans[n]||[]).map(j=>q.o[j])}));
+ const all=sels.flatMap(x=>x.o.map(o=>o.t));const has=t=>all.includes(t);
+ const red=[...new Set(sels.flatMap(x=>x.o.filter(o=>o.k==="!").map(o=>o.msg)))];
+ const skipQ=/^(Which describe your food|Which describe your routine|Has stress or poor sleep|Does anyone in your family)/;
+ const rupa=sels.filter(x=>/^Rupa/.test(x.q.tag)&&!/How long|How much does it affect/.test(x.q.q)).flatMap(x=>x.o.map(o=>o.t).filter(t=>!ALN_NEUTRAL.test(t)));
+ const trig=[...new Set(sels.filter(x=>/^Hetu|^Upashaya/.test(x.q.tag)&&!skipQ.test(x.q.q)&&!/What have you (tried|been applying)/.test(x.q.q)).flatMap(x=>x.o.map(o=>o.t).filter(t=>!ALN_NEUTRAL.test(t)&&!ALN_CAUSE[t])))];
+ const fac=Object.keys(ALN_CAUSE).filter(has).map(k=>ALN_CAUSE[k]);
+ if(has("Yes, a lot"))fac.push(["Significant stress or poor sleep","Ongoing stress and poor sleep (Manasika nidana) disturb digestion and the nervous system, and often make other complaints worse."]);
+ else if(has("Some")&&sels.some(x=>/Has stress or poor sleep/.test(x.q.q)))fac.push(["Some stress or poor sleep","Some stress or poor sleep was reported. Over time this can add to the other factors."]);
+ const fam=sels.some(x=>/Does anyone in your family/.test(x.q.q)&&x.o.some(o=>o.t==="Yes"));
+ if(fam)fac.push(["Family history","A relative with the same or a related problem points to a family tendency (Kulaja or Sahaja), which usually means a longer course and steadier care."]);
+ const habits=["Frequent fried, very spicy or oily food","Frequent sour or fermented food (curd, pickles)","Often combine incompatible foods (for example fish with milk)","Irregular meal times, or eating before the last meal is digested","Sleep late at night","Sleep in the daytime","Often hold back natural urges (urine, stool, thirst, sleep)","Little physical activity"].filter(has).length;
+ const strain=habits>=4?"High":habits>=2?"Moderate":habits>=1?"Low":"None reported";
+ const strainTxt=habits?`${habits} of 8 food and routine habits that classical texts link with disturbed digestion were reported. This is a habit count from your answers, not a test, and your Vaidya will check your digestion and tongue, pulse and appetite directly.`:"None of the listed food or routine habits was reported. Your Vaidya will still check digestion directly.";
+ const dur=has("More than a year")?"long":has("3 to 12 months")?"mid":has("2 weeks to 3 months")||has("Less than 2 weeks")?"short":"";
+ const lot=has("A lot")||has("Every month or more");
+ const pri=red.length?{lvl:"See a doctor soon",why:"Some answers match warning signs from the NIH and Ayush sources that need a doctor's review soon."}:lot||dur==="long"?{lvl:"Consult soon",why:lot?"It affects your daily life or you fall ill often, so a consultation within a few days is sensible.":"It has lasted more than a year, so a proper consultation is worthwhile rather than home care alone."}:{lvl:"Routine",why:"No warning signs were reported. A routine consultation is enough."};
+ const outlook=red.length?"The outlook cannot be judged until a doctor has seen you and checked the warning signs you reported.":fam&&dur==="long"?"Long-standing with a family tendency: change is usually gradual. Expect steady care over several months with a review every 4 to 6 weeks.":dur==="long"?"Long-standing: improvement is usually gradual. Expect a few months of regular care and a review every 4 to 6 weeks.":dur==="mid"?"Present for some months: it usually responds when causes are corrected. Plan on a review at 4 to 6 weeks.":dur==="short"?"Recent onset: this is often the easiest stage to address. Plan on a review in 2 to 4 weeks, sooner if it worsens.":"The duration was not clear. Your Vaidya will set the review time.";
+ const guide=[];
+ if(habits===0||has("Irregular meal times, or eating before the last meal is digested")||has("Frequent fried, very spicy or oily food"))guide.push("Eat freshly cooked food at fixed times, and only when the previous meal has digested.");
+ if(has("Often combine incompatible foods (for example fish with milk)")||ail.g===0)guide.push("Avoid incompatible combinations such as fish with milk, and limit very sour, salty or fermented food.");
+ if(has("Sleep late at night")||has("Sleep in the daytime"))guide.push("Keep a fixed bedtime and wake time. Avoid daytime sleep unless your Vaidya advises it.");
+ if(has("Often hold back natural urges (urine, stool, thirst, sleep)"))guide.push("Do not hold back urine, stool, thirst or sleep.");
+ if(has("Little physical activity"))guide.push("Add a daily walk or gentle exercise, building up slowly.");
+ if(has("Long exposure to heat or sun"))guide.push("Limit long exposure to heat and sun, and drink water regularly.");
+ if(has("Yes, a lot")||has("Some"))guide.push("Protect sleep and set aside time each day to unwind. Tell your Vaidya how stress affects you.");
+ guide.push("Do not start herbal medicines, oils on broken skin or procedures on your own. Your Vaidya decides after examination.");
+ const prep=["A list of all medicines you take now, with doses","Any recent blood or scan reports","A short timeline: when it started and what made it better or worse","Photos of the problem over time, if it is visible"];
+ return {pri,rupa,trig,fac,smp:ALN_SMP[ail.g]||ALN_SMP[7],strain,strainTxt,outlook,guide,prep};
+}
 function alSum(){const ail=alById(ALS_st.id),st=alSteps(),groups={},red=[],cau=[],meds=[],rows=[];
  st.forEach((q,n)=>{const sel=(ALS_st.ans[n]||[]).map(j=>q.o[j]);const txt=sel.map(o=>o.t).join("; ");(groups[q.tag]=groups[q.tag]||[]).push({q:q.q,a:txt});rows.push(txt);
   sel.forEach(o=>{if(o.k==="!"&&!red.includes(o.msg))red.push(o.msg);if(o.k==="~"&&!cau.includes(o.msg))cau.push(o.msg)});
   if(q.q.startsWith("Do you take any regular")){sel.forEach(o=>{if(o.k==="~")meds.push(o.t)})}});
  const sig=ail.id+"|"+rows.join("#");
- return {kind:"gen",aid:ail.id,type:ail.n,pattern:"Pre-consultation summary. No dosha score; the doctor decides the pattern.",ay:ail.ay,dosha:ail.dosha,groups,red,cautions:cau.filter(x=>!meds.length||!/^Takes /.test(x)),meds,src:ail.src.map(k=>ALS[k]),lim:ail.lim,sig,split:{Vata:0,Pitta:0,Kapha:0},noPat:true,agni:"",ama:"",dhatu:"",factors:[]}}
-function ALsumHtml(s){
+ return {kind:"gen",aid:ail.id,type:ail.n,pattern:"Pre-consultation summary. No dosha score; the doctor decides the pattern.",ay:ail.ay,dosha:ail.dosha,groups,red,cautions:cau.filter(x=>!meds.length||!/^Takes /.test(x)),meds,src:ail.src.map(k=>ALS[k]),lim:ail.lim,sig,split:{Vata:0,Pitta:0,Kapha:0},noPat:true,agni:"",ama:"",dhatu:"",factors:[],an:alAnalyse(ail,st)}}
+function alAnSections(s){const a=s.an;if(!a)return [];
+ const li=x=>`<li>${esc(x)}</li>`;
+ const tests=(window._testsFor?window._testsFor(s.aid):[]);
+ return [
+ {h:"How urgent is this?",b:`<p><span class="tag ${a.pri.lvl==="Routine"?"g":"a"}">${esc(a.pri.lvl)}</span></p><p class="sm">${esc(a.pri.why)}</p>`},
+ {h:"What you reported (Rupa)",b:a.rupa.length?`<ul class="sm">${a.rupa.map(li).join("")}</ul>`:`<p class="sm mu">No specific symptoms were selected.</p>`},
+ {h:"Likely contributing factors (Nidana)",b:(a.fac.length?`<ul class="sm">${a.fac.map(f=>`<li><b>${esc(f[0])}.</b> ${esc(f[1])}</li>`).join("")}</ul>`:`<p class="sm mu">None of the common food, routine or stress factors was reported.</p>`)+(a.trig.length?`<p class="sm"><b>Triggers you reported for this condition:</b> ${a.trig.map(esc).join("; ")}.</p>`:"")},
+ {h:"How it may have developed (Samprapti)",b:`<p class="sm">${esc(a.smp)}</p><p class="sm"><b>Digestion and routine strain:</b> ${esc(a.strain)}. ${esc(a.strainTxt)}</p><p class="sm mu">Ayurvedic term: ${esc(s.ay)}<br>Dosha: ${esc(s.dosha)}</p>`},
+ {h:"Outlook",b:`<p class="sm">${esc(a.outlook)}</p><p class="sm mu">For your Vaidya to review. Not a promise of results.</p>`},
+ {h:"What you can do now",b:`<ul class="sm">${a.guide.map(li).join("")}</ul>`},
+ {h:"Get ready for your consultation",b:`<ul class="sm">${a.prep.map(li).join("")}</ul>${tests.length?`<p class="sm"><b>Tests your doctor may ask for:</b> ${tests.map(esc).join("; ")}. <span class="mu">The doctor decides which are needed.</span></p>`:""}`}];
+}
+function ALsumHtml(s,full){
  return `<p><b>${esc(s.type)}</b> <span class="tag">Summary only</span></p><p class="mu sm">Ayurvedic term: ${esc(s.ay)}<br>Dosha information: ${esc(s.dosha)}</p>
  ${s.red.length?`<div class="warn sm"><b>Warning signs reported</b>${s.red.map(esc).join("<br>")}</div>`:""}
  ${s.cautions.length?`<div class="note sm"><b>Cautions</b>${s.cautions.map(esc).join("<br>")}</div>`:""}
  ${s.meds.length?`<p class="sm"><b>Regular medicines:</b> ${esc(s.meds.join(", "))}</p>`:""}
  <details><summary class="sm">Answers grouped as Nidana, Rupa and Upashaya</summary>${Object.keys(s.groups).map(g=>`<p class="sm" style="margin:8px 0 2px"><b>${esc(g)}</b></p><ul class="sm">${s.groups[g].map(r=>`<li>${esc(r.q)} <b>${esc(r.a)}</b></li>`).join("")}</ul>`).join("")}</details>
+ ${full||!s.an?"":`<details><summary class="sm">Detailed analysis</summary>${alAnSections(s).map(x=>`<p class="sm" style="margin:8px 0 2px"><b>${esc(x.h)}</b></p>${x.b}`).join("")}</details>`}
  ${ALsrc(s)}`}
 function ALsrc(s){return `<details><summary class="sm">Sources behind these questions (Ayush and NIH only)</summary><ul class="sm">${s.src.map(x=>`<li><a href="${x[1]}" target="_blank" rel="noopener">${esc(x[0])}</a></li>`).join("")}</ul>${s.lim?`<p class="sm"><b>Limit:</b> ${esc(s.lim)}</p>`:""}<p class="sm mu">Not reviewed by a registered Vaidya yet.</p></details>`}
 function alResult(){const s=alSum();window._SUM=s;cur=null;
  app.innerHTML=`<h1>Your pre-consultation summary</h1><p class="mu" style="margin:6px 0 14px">This is not a diagnosis. It organises your answers so a doctor can review them.</p>
  ${s.red.length?`<div class="warn"><b>Please do not wait for an online booking</b>Some answers match warning signs that the NIH and Ayush sources say need a doctor's review soon. Tell the doctor first, or visit a clinic or hospital near you.<br><br>${s.red.map(esc).join("<br>")}</div>`:""}
- <div class="card">${ALsumHtml(s)}</div>
+ <div class="card">${ALsumHtml(s,true)}</div>
+ ${alAnSections(s).map(x=>`<div class="card"><h3>${esc(x.h)}</h3>${x.b}</div>`).join("")}
  ${window.onResultHtml?window.onResultHtml(s):""}
  <div class="card"><h3>Share with a doctor</h3><p class="mu">Send this summary only to a doctor you trust.</p><div class="row"><button class="btn" onclick="shareWA()">WhatsApp</button><button class="btn g" onclick="copySummary()">Copy text</button></div></div>
  <div class="row"><button class="btn g" onclick="alChange()">Start another ailment</button></div>`;scrollTo(0,0);
  if(window.onAssessmentDone)window.onAssessmentDone(s)}
 const _stOrig=summaryText;
 summaryText=function(s){if(s.kind!=="gen")return _stOrig(s);
- return [s.type+" pre-consultation summary (not a diagnosis)","Ayurvedic term: "+s.ay,"Dosha information: "+s.dosha,s.red.length?"WARNING SIGNS:":"",...s.red.map(x=>"! "+x),s.cautions.length?"Cautions:":"",...s.cautions.map(x=>"- "+x),s.meds.length?"Regular medicines: "+s.meds.join(", "):"",...Object.keys(s.groups).flatMap(g=>[g+":",...s.groups[g].map(r=>"- "+r.q+" "+r.a)])].filter(x=>x!=="").join("\n")};
+ return [s.type+" pre-consultation summary (not a diagnosis)","Ayurvedic term: "+s.ay,"Dosha information: "+s.dosha,s.red.length?"WARNING SIGNS:":"",...s.red.map(x=>"! "+x),s.cautions.length?"Cautions:":"",...s.cautions.map(x=>"- "+x),s.meds.length?"Regular medicines: "+s.meds.join(", "):"",...(s.an?["Priority: "+s.an.pri.lvl,"Contributing factors: "+(s.an.fac.map(f=>f[0]).join("; ")||"none reported"),"Outlook: "+s.an.outlook]:[]),...Object.keys(s.groups).flatMap(g=>[g+":",...s.groups[g].map(r=>"- "+r.q+" "+r.a)])].filter(x=>x!=="").join("\n")};

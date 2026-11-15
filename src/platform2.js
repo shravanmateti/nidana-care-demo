@@ -69,7 +69,7 @@ VIEWS["patient.clinic"]=()=>{
  return `<h2>Clinic treatment</h2><div class="card"><h3>Advised by ${E(doc(r.doctor).name)}</h3><ul class="sm">${r.treat.map(t=>`<li>${E(t.name)} × ${t.sessions} sessions</li>`).join("")}</ul></div>
  ${done?`<div class="good">Booked at ${E(cli(done.clinic).name)} on ${E(done.date)}. Total ${inr(done.total)} (pay at clinic).</div>`:`<p class="sm mu">Audited clinics that offer every advised treatment are shown first.</p><div class="grid">${DB.clinics.slice().sort((x,y)=>{const f=c=>(c.status==="audited"&&r.treat.every(t=>c.treat[t.name]))?0:1;return f(x)-f(y)||y.score-x.score}).map(c=>{
   const ok=c.status==="audited",lines=r.treat.map(t=>({n:t.name,s:t.sessions,p:c.treat[t.name]}));const off=lines.every(l=>l.p),tot=lines.reduce((x,l)=>x+(l.p||0)*l.s,0);
-  return `<div class="card"><h3>${E(c.name)}</h3><p class="sm">SOP audit score <b>${c.score}%</b> · last audit ${fd(c.last)}</p>
+  return `<div class="card"><h3>${E(c.name)}</h3><p class="sm">SOP audit score <b>${c.score}%</b> · last audit ${lastTxt(c)}</p>
   ${ok?`<span class="tag g">Audited partner</span>`:`<span class="tag w">Not bookable: audit score below 80%</span>`}
   <ul class="sm">${lines.map(l=>`<li>${E(l.n)} × ${l.s}: ${l.p?inr(l.p*l.s):"not offered here"}</li>`).join("")}</ul>
   ${ok&&off?`<div class="fl"><label class="sm">Date <input type="date" id="bd_${c.id}" value="${isoDay(addDays(new Date(),1))}" min="${isoDay(new Date())}"></label><button class="btn s" onclick="NC.bookClinic('${r.id}','${c.id}')">Book · ${inr(tot)}</button></div>`:""}</div>`}).join("")}</div>`}`;
