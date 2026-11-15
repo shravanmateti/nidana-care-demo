@@ -1,0 +1,1 @@
+Read CLAUDE.md in this repo first. This is my Nidana Care Ayurveda prototype (single-file app built from src/ by build.py). Continue from there: [write your next task here]. Rebuild with python3 build.py, run node tests/t7.js after changes, copy dist/index.html to index.html in the repo root, and only commit or push when I ask.

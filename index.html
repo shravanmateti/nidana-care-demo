@@ -74,7 +74,25 @@ label.ck{display:flex;gap:8px;align-items:flex-start;margin:6px 0;font-size:14px
 .nxt{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:#e4efe8;border:1.5px solid var(--ac);border-radius:12px;padding:10px 12px;margin-top:12px;font-size:14px}
 .err{color:#8a2b22;background:#f7e2de;border-radius:8px;padding:6px 10px;font-size:13px;margin:8px 0}
 details.card summary{cursor:pointer}
-@media(max-width:700px){.top{position:static}}
+@media(max-width:700px){.top{position:static}
+.wrap{padding:0 12px 60px}
+button,select,.pills button,.stg button,.chips button,.tabs button{min-height:44px}
+.btn.s{min-height:44px;padding:9px 14px}
+.stg summary{padding:10px 0;min-height:44px;display:flex;align-items:center}
+details.card summary{padding:8px 0;min-height:44px}
+input[type=checkbox],input[type=radio]{width:22px;height:22px;min-height:0}
+label.ck{padding:4px 0}
+select,input,textarea{font-size:16px;min-height:44px}
+.pills,.stgb{gap:8px}
+table.stk,table.stk tbody,table.stk tr,table.stk td{display:block;width:100%}
+table.stk tr:first-child{display:none}
+table.stk tr{padding:10px 0;border-bottom:1px solid var(--ln)}
+table.stk td{border:0;padding:3px 0}
+table.stk td[data-l]:before{content:attr(data-l);display:block;font-size:12px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.03em}
+table.stk td:empty{display:none}
+.card{padding:14px}
+.nxt .btn{width:100%}
+}
 </style></head><body><div class="wrap" id="root"></div><div id="toast" role="status"></div>
 <script>
 
@@ -800,8 +818,8 @@ function catView(DB,inr){
  <p class="mu sm" style="margin-top:8px">Each item cites an Ayush or NIH source. Where the source is a small study or only a definition, the note says so. This lists what the sources mention. It does not recommend a dose or a treatment. The doctor decides.</p></div>
  <div class="note sm"><b>Metal safety</b>NIH (NCCIH) warns that some Ayurvedic preparations contain lead, mercury or arsenic in toxic amounts. <a href="${CR.nccih[1]}" target="_blank" rel="noopener">NCCIH</a> · <a href="${CR.pmcC[1]}" target="_blank" rel="noopener">NLM case report</a>. Herbo-mineral items need a heavy-metal assay before approval.</div>
  <div class="note sm"><b>Gaps in this catalogue</b>${gapList(DB)}</div>
- <div class="card"><h3>Medicines (${ps.length})</h3><table><tr><th>Product</th><th>For</th><th>Status</th><th>Sources</th></tr>${ps.map(p=>`<tr><td>${esc(p.name)}<br><span class="mu sm">${esc(p.form)} · ${inr(p.price)}</span></td><td class="sm">${(p.ail||[]).map(a=>esc(nm(a))).join(", ")}${p.note?`<br><span class="mu">${esc(p.note)}</span>`:""}</td><td><span class="tag ${p.status==="approved"?"g":"a"}">${p.status}</span>${hmTag(p)}</td><td class="sm">${catRefs(p.ref)||"None reviewed"}</td></tr>`).join("")||"<tr><td colspan=4>None</td></tr>"}</table></div>
- <div class="card"><h3>Clinic treatments (${pr.length})</h3><table><tr><th>Treatment</th><th>For</th><th>Offered by</th><th>Sources</th></tr>${pr.map(n=>{const i=PROC_INFO[n];return `<tr><td>${esc(n)}${i.sh?`<br><span class="tag a">Shodhana: check pregnancy first</span>`:""}</td><td class="sm">${i.ail.map(a=>esc(nm(a))).join(", ")}${i.note?`<br><span class="mu">${esc(i.note)}</span>`:""}</td><td class="sm">${DB.clinics.filter(c=>c.treat[n]).map(c=>esc(c.city)+" "+inr(c.treat[n])).join("<br>")||"No clinic yet"}</td><td class="sm">${catRefs(i.ref)||"None reviewed"}</td></tr>`}).join("")||"<tr><td colspan=4>None</td></tr>"}</table></div>`}
+ <details class="card"${innerWidth>700?" open":""}><summary><h3 style="display:inline">Medicines (${ps.length})</h3></summary><table><tr><th>Product</th><th>For</th><th>Status</th><th>Sources</th></tr>${ps.map(p=>`<tr><td>${esc(p.name)}<br><span class="mu sm">${esc(p.form)} · ${inr(p.price)}</span></td><td class="sm">${(p.ail||[]).map(a=>esc(nm(a))).join(", ")}${p.note?`<br><span class="mu">${esc(p.note)}</span>`:""}</td><td><span class="tag ${p.status==="approved"?"g":"a"}">${p.status}</span>${hmTag(p)}</td><td class="sm">${catRefs(p.ref)||"None reviewed"}</td></tr>`).join("")||"<tr><td colspan=4>None</td></tr>"}</table></details>
+ <details class="card"${innerWidth>700?" open":""}><summary><h3 style="display:inline">Clinic treatments (${pr.length})</h3></summary><table><tr><th>Treatment</th><th>For</th><th>Offered by</th><th>Sources</th></tr>${pr.map(n=>{const i=PROC_INFO[n];return `<tr><td>${esc(n)}${i.sh?`<br><span class="tag a">Shodhana: check pregnancy first</span>`:""}</td><td class="sm">${i.ail.map(a=>esc(nm(a))).join(", ")}${i.note?`<br><span class="mu">${esc(i.note)}</span>`:""}</td><td class="sm">${DB.clinics.filter(c=>c.treat[n]).map(c=>esc(c.city)+" "+inr(c.treat[n])).join("<br>")||"No clinic yet"}</td><td class="sm">${catRefs(i.ref)||"None reviewed"}</td></tr>`}).join("")||"<tr><td colspan=4>None</td></tr>"}</table></details>`}
 
 function gapList(DB){const f=window._catF;const rows=AL.filter(a=>!f||a.id===f).map(a=>{const np=DB.products.filter(p=>p.ail.includes(a.id)).length,nt=PROCS.filter(n=>PROC_INFO[n].ail.includes(a.id)).length;return [a.n,np,nt]}).filter(r=>r[1]===0||r[2]===0);
  return rows.length?"No item was found in the Ayush or NIH pages reviewed for: "+rows.map(r=>esc(r[0])+" ("+(r[1]===0&&r[2]===0?"medicines and treatments":r[1]===0?"medicines":"clinic treatments")+")").join("; ")+". These are gaps in the sources reviewed here, not a finding that nothing helps. The doctor decides.":"None for this selection."}
@@ -905,7 +923,16 @@ function render(){
  const f=VIEWS[S.role+"."+S.tab];
  if(S.role==="patient"&&S.tab==="assess"){mountAssess(v);return}
  v.innerHTML=f?f():"";
+ stackTables(v);
  if(S.role==="admin"&&S.tab==="revenue")sim();
+}
+/* mobile: label cells so CSS can stack wide tables (3+ columns with a header row) */
+function stackTables(root){
+ root.querySelectorAll("table").forEach(t=>{
+  const h=t.rows[0];if(!h||!h.cells.length||![...h.cells].every(c=>c.tagName==="TH")||h.cells.length<3)return;
+  const L=[...h.cells].map(c=>c.textContent.trim());t.classList.add("stk");
+  [...t.rows].slice(1).forEach(r=>[...r.cells].forEach((c,i)=>{if(L[i])c.setAttribute("data-l",L[i])}));
+ });
 }
 /* ---------- patient: assessment hooks ---------- */
 let startedThisRun=false;
@@ -1267,7 +1294,6 @@ const _done=window.onAssessmentDone;window.onAssessmentDone=s=>{_done(s);started
  const m=DB.metrics;m.reach=m.reach||[];if(Q.length){m.reach[Q.length]=(m.reach[Q.length]||0)}save()};
 return {get DB(){return DB},nextGo,render,setRole,setTab,setStage,goto,setCtx,reqLead,pickSlot,confirmBook,placeOrder,bookClinic,logFollow,setRemind,bookReview,openCase,closeCase,dr,drTest,drAddMed,drDelMed,pickAgree,drOtherTest,drAddTreat,drDelTreat,issueRx,markLead,pickPlan,submitSup,addProduct,setOrder,setBooking,saveAudit,verifyDoc,approveSup,approveProd,recordAudit,saveSettings,resetAll,sim};
 })();
-
 
 NC.render();
 </script></body></html>
