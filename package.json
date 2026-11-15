@@ -1,0 +1,13 @@
+{
+  "name": "nidana-care-demo",
+  "private": true,
+  "description": "Nidana Care clickable prototype. Sample data only, not for clinical use.",
+  "scripts": {
+    "build": "python3 build.py",
+    "test": "npm run build && node tests/run.js",
+    "test:all": "npm run build && node tests/run.js t2 t3 t4 t5 t6 t7 t8 t9"
+  },
+  "devDependencies": {
+    "playwright": "^1.50.0"
+  }
+}

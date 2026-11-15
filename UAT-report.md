@@ -86,3 +86,16 @@ cd nidana-care-demo
 npm i playwright --no-save && npx playwright install chromium
 python3 build.py && node tests/t7.js   # t2 t3 t4 t6 t8, and t5 (slow)
 ```
+
+## 7. Fixes applied after this report
+
+Items 1, 2 (evidence fields), 3, 4, 4b, 5 and 6 are done and covered by `tests/t9.js` (27 checks). Items 7 to 10 need people, partners or a backend and are not code changes.
+
+| Item | What changed |
+|---|---|
+| 1 | Guards now live inside `approveProd`, `approveSup`, `placeOrder`, `bookClinic`, `drAddTreat`, `issueRx` and `confirmBook` |
+| 2 | Mineral products need lab name, report number and a past test date. Admin sees them and can reject with a reason. The files themselves are still not uploaded (needs a backend) |
+| 3 | An empty self-audit is not saved, and a live "n of N ticked" count is shown |
+| 4, 4b | Sections fold on phones and remember their state. Phone heights: supplier Products 4,357 to 1,329px, admin Verification 3,146 to 2,464px, doctor case sheet 2,744 to 2,505px. "Issue prescription" is a sticky bar |
+| 5 | Every field gets an accessible name, and source links are at least 40px tall on phones |
+| 6 | `package.json`, `tests/run.js` and a GitHub Actions workflow. t5 runs nightly |

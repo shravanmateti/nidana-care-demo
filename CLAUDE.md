@@ -23,8 +23,15 @@ Roles: Patient, Doctor, Supplier, Clinic, Admin. Rollout stages 0 to 4 (assess+l
 ## Recent UX work (already done)
 Guided "What to do now" bar (`nextStep`, `nextBar`, `nextGo`), inline validation on the case sheet, ailment-specific "Tests advised" (`testsFor`), patient answers expanded, collapsed demo stage control, clinic list sorted by audited and offered treatments, Revenue tab available at all stages, "Turn on Stage N" button on locked tabs.
 
+## Added in the UAT fixes
+- Safety rules are enforced inside the functions (`approveProd`, `approveSup`, `placeOrder`, `bookClinic`, `drAddTreat`, `issueRx`, `confirmBook`), not only by hiding buttons. Keep it that way.
+- Herbo-mineral products carry `assay {lab,no,date}`; admin sees it and can `rejectProd` with a reason.
+- `fold(key,title,body,open)` makes a collapsible card whose open state lives in `S.fold`; closed by default on phones unless `open===true`. Catalogue uses `window._catFold`.
+- `labelAll` gives every unlabelled field an aria-label after each render. `stackTables` stacks 3+ column tables on phones.
+- CI: `.github/workflows/test.yml` builds, checks `index.html` equals the build, and runs `node tests/run.js` (t5 nightly). `npm test` does the same locally.
+
 ## Tests
-Playwright (`npm i playwright`, needs a Chrome/Chromium). Run from repo root after `python3 build.py`: `node tests/t7.js` (full patient-doctor-clinic loop, 15 checks), t2/t3/t4/t5/t6/t8 for the rest. Avoid UI text containing the word "Next" outside the wizard's Next button, because tests and users match on it. Some tests take over 100 s (t5 runs all 31 flows).
+Playwright (`npm i playwright`, needs a Chrome/Chromium). Run from repo root after `python3 build.py`: `node tests/run.js` runs t2,t3,t4,t6,t7,t8,t9 and fails on any FAIL line; `node tests/t7.js` is the full patient-doctor-clinic loop (15 checks), t9 covers the guards, assay evidence, labels and folds, t5 runs all ailment flows. Sections on the doctor case sheet, admin queue and catalogue are folded on phones: tests call `document.querySelectorAll('#view details').forEach(d=>d.open=true)` before touching them. Avoid UI text containing the word "Next" outside the wizard's Next button, because tests and users match on it. Some tests take over 100 s (t5 runs all 31 flows).
 
 ## Known gaps / honest caveats
 - No Vaidya has reviewed the content. Say so in any demo.
