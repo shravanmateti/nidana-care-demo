@@ -3,7 +3,7 @@ const {chromium}=require('playwright');
  const b=await chromium.launch({args:['--no-sandbox']});
  const errs=[];
  const ok=(n,c)=>console.log((c?'PASS':'FAIL')+' '+n);
- async function fresh(w=420){const ctx=await b.newContext({viewport:{width:w,height:900}});const p=await ctx.newPage();p.on('pageerror',e=>errs.push('PAGEERR '+e.message));p.on('console',m=>{if(m.type()==='error')errs.push('CONSOLE '+m.text())});p.on('dialog',d=>d.dismiss());await p.goto('file://'+process.cwd()+'/dist/index.html');await p.click('text=Hair fall, thinning, slow growth');await p.click('text=English');return p}
+ async function fresh(w=420){const ctx=await b.newContext({viewport:{width:w,height:900}});const p=await ctx.newPage();p.on('pageerror',e=>errs.push('PAGEERR '+e.message));p.on('console',m=>{if(m.type()==='error')errs.push('CONSOLE '+m.text())});p.on('dialog',d=>d.dismiss());await p.goto('file://'+process.cwd()+'/dist/index.html?demo=1');await p.click('text=Hair fall, thinning, slow growth');await p.click('text=English');return p}
  async function run(p,pick){await p.click('text=Start assessment');const nq=await p.evaluate(()=>Q.length);for(let k=0;k<nq;k++){const o=await p.$$('button.opt');await o[pick(k,o.length)].click();await p.click(k<nq-1?'text=Next':'text=See results')}}
  const T=p=>p.innerText('body');
  // A: all-None

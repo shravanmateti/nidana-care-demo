@@ -4,7 +4,7 @@ const {chromium}=require('playwright');
  const p=await b.newPage({viewport:{width:420,height:900}});
  const errs=[];p.on('pageerror',e=>errs.push('PAGEERR '+e.message));p.on('console',m=>{if(m.type()==='error')errs.push('CONSOLE '+m.text())});
  p.on('dialog',d=>d.dismiss());
- await p.goto('file://'+process.cwd()+'/dist/index.html');
+ await p.goto('file://'+process.cwd()+'/dist/index.html?demo=1');
  const txt=async()=>(await p.innerText('body'));
  const ok=(n,c)=>console.log((c?'PASS':'FAIL')+' '+n);
  async function runAssess(pick){ // pick(k,optsLen)->index

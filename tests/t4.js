@@ -4,7 +4,7 @@ const {chromium}=require('playwright');
  const p=await b.newPage({viewport:{width:420,height:900}});
  const errs=[];p.on('pageerror',e=>errs.push(e.message));p.on('console',m=>{if(m.type()==='error')errs.push(m.text())});p.on('dialog',d=>d.dismiss());
  const ok=(n,c)=>console.log((c?'PASS':'FAIL')+' '+n);const T=()=>p.innerText('body');
- await p.goto('file://'+process.cwd()+'/dist/index.html');await p.click('text=Hair fall, thinning, slow growth');await p.click('text=English');await p.click('text=Start assessment');
+ await p.goto('file://'+process.cwd()+'/dist/index.html?demo=1');await p.click('text=Hair fall, thinning, slow growth');await p.click('text=English');await p.click('text=Start assessment');
  const nq=await p.evaluate(()=>Q.length);
  for(let k=0;k<nq;k++){const o=await p.$$('button.opt');await o[k===0||k===1?1:k===2||k===15?o.length-1:0].click();await p.click(k<nq-1?'text=Next':'text=See results')}
  await p.click('button:has-text("Book a doctor") >> nth=0').catch(()=>{});

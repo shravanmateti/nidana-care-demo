@@ -4,7 +4,7 @@ const {chromium}=require('playwright');
  const errs=[];const ok=(n,c)=>console.log((c?'PASS':'FAIL')+' '+n);
  const p=await (await b.newContext({viewport:{width:900,height:900}})).newPage();
  p.on('pageerror',e=>errs.push('PAGEERR '+e.message));p.on('console',m=>{if(m.type()==='error')errs.push('CONSOLE '+m.text())});p.on('dialog',d=>d.dismiss());
- await p.goto('file://'+process.cwd()+'/dist/index.html');
+ await p.goto('file://'+process.cwd()+'/dist/index.html?demo=1');
  const d=await p.evaluate(()=>({np:NC.DB.products.length,nproc:PROCS.length,noSrc:NC.DB.products.filter(x=>!x.ref.length).map(x=>x.id),bad:PROCS.filter(n=>PROC_INFO[n].ail.some(a=>!alById(a))),badP:NC.DB.products.filter(x=>x.ail.some(a=>!alById(a))).map(x=>x.id),clinicBad:NC.DB.clinics.flatMap(c=>Object.keys(c.treat).filter(n=>!PROC_INFO[n]))}));
  console.log(JSON.stringify(d));
  ok('every ailment id valid',d.bad.length===0&&d.badP.length===0&&d.clinicBad.length===0);

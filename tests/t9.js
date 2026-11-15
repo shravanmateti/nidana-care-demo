@@ -2,7 +2,7 @@
 const {chromium}=require('playwright');
 (async()=>{
  const b=await chromium.launch({args:['--no-sandbox']});
- const mk=async(w=390)=>{const p=await (await b.newContext({viewport:{width:w,height:800}})).newPage();p.on('dialog',d=>d.dismiss());p.errs=[];p.on('pageerror',e=>p.errs.push(e.message));await p.goto('file://'+process.cwd()+'/dist/index.html');await p.evaluate(()=>NC.setStage(4));return p};
+ const mk=async(w=390)=>{const p=await (await b.newContext({viewport:{width:w,height:800}})).newPage();p.on('dialog',d=>d.dismiss());p.errs=[];p.on('pageerror',e=>p.errs.push(e.message));await p.goto('file://'+process.cwd()+'/dist/index.html?demo=1');await p.evaluate(()=>NC.setStage(4));return p};
  let ok=0,bad=0;const T=(n,c,x)=>{console.log(c?'PASS':'FAIL',n,c?'':(x||''));c?ok++:bad++};
  const txt=p=>p.evaluate(()=>document.body.innerText);
  const openAll=p=>p.evaluate(()=>document.querySelectorAll('#view details').forEach(d=>d.open=true));

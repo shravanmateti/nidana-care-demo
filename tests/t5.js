@@ -4,7 +4,7 @@ const {chromium}=require('playwright');
  const errs=[];const ok=(n,c)=>console.log((c?'PASS':'FAIL')+' '+n);
  const ctx=await b.newContext({viewport:{width:420,height:900}});const p=await ctx.newPage();
  p.on('pageerror',e=>errs.push('PAGEERR '+e.message));p.on('console',m=>{if(m.type()==='error')errs.push('CONSOLE '+m.text())});p.on('dialog',d=>d.dismiss());
- await p.goto('file://'+process.cwd()+'/dist/index.html');
+ await p.goto('file://'+process.cwd()+'/dist/index.html?demo=1');
  let t=await p.innerText('body');
  ok('picker shown first',t.includes('What would you like help with?')&&t.includes('Acne, pimples, oily skin')&&t.includes('Detox (Panchakarma)'));
  const ids=await p.evaluate(()=>AL.filter(a=>a.id!=='hair').map(a=>[a.id,a.n,alSteps===undefined?0:0]));
