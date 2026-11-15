@@ -118,4 +118,8 @@ Date: 15 Nov 2026. Four requests were built and tested: (1) the detailed analysi
 - The prototype keeps one patient record per browser, so two patient accounts in the same browser share assessments and bookings.
 - There is no password reset or change. Admin can use "Reset all data" in Settings.
 - The analysis uses general classical principles and the patient's own answers. It has not been reviewed by a Vaidya, and the contributing-factor wording needs that review before real use.
-- Doctors are still added only as sample data. Doctor onboarding would follow the same pattern as suppliers and clinics.
+- Doctor onboarding was added afterwards (see section 9).
+
+## 9. Doctor onboarding
+
+Admin > Onboarding > doctor form: name, qualification (must include BAMS), experience, languages, fee (₹100 to ₹5000), state council registration number and council, contact, and weekly slots (for example "Mon 10:00, Wed 17:00"). The doctor starts as unverified with a login and a one-time temporary password. Patients cannot book an unverified doctor, and the admin cannot verify one without a registration number. Tested in t10 (validation, duplicates, pending state, login, booking refused until verified, booking works after verification) and in the end-to-end run.
