@@ -25,7 +25,7 @@ VIEWS["admin.verify"]=()=>{
  }
  return h;
 };
-function verifyDoc(id){doc(id).reg="verified";save();render()}
+function verifyDoc(id){const d=doc(id);if(!d||!d.regno){toast("Cannot verify: registration number missing");return}d.reg="verified";save();render()}
 function approveSup(id){const s=sup(id);if(!s.licence||!s.gmp||!s.report){toast("Cannot approve: licence, GMP certificate and batch test report are all needed");return}s.status="verified";save();render()}
 function approveProd(id){const p=prod(id);
  if(!p||sup(p.sup).status!=="verified"){toast("Cannot approve: the supplier is not verified");return}
@@ -93,6 +93,21 @@ function onboardSup(){
  const id="s"+uid();DB.suppliers.push({id,name:n,licence:l,gmp:g,report:r,status:"pending",contact:c,email:e,phone:ph,state:st,since:new Date().toISOString()});
  mkLogin("supplier",id,n,e);save();toast("Supplier onboarded. Verification is pending.");S.fold.ad_sup=true;render()
 }
+function onboardDoc(){
+ const n=val("ob_dn"),q=val("ob_dq"),ex=parseInt(val("ob_dx"),10),lg=val("ob_dl"),fee=parseInt(val("ob_df"),10),rn=val("ob_dr"),cn=val("ob_dc"),e=val("ob_de").toLowerCase(),ph=val("ob_dp");
+ const slots=val("ob_ds").split(",").map(x=>x.trim()).filter(Boolean);
+ if(n.length<3){toast("Enter the doctor's full name");return}
+ if(!/BAMS/i.test(q)){toast("Qualification must include BAMS (Ayurveda degree)");return}
+ if(isNaN(ex)||ex<0||ex>60){toast("Enter years of experience between 0 and 60");return}
+ if(lg.length<2){toast("Enter the languages the doctor consults in");return}
+ if(isNaN(fee)||fee<100||fee>5000){toast("Consultation fee must be between ₹100 and ₹5000");return}
+ if(rn.length<5||cn.length<2){toast("Enter the state council registration number and the council's name");return}
+ if(DB.doctors.some(x=>x.regno&&x.regno.toLowerCase()===rn.toLowerCase())){toast("A doctor with this registration number is already on file");return}
+ const er=obCheck(e,ph);if(er){toast(er);return}
+ if(!slots.length||slots.some(x=>!/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) ([01]\d|2[0-3]):[0-5]\d$/.test(x))){toast("Write slots like Mon 10:00, Wed 17:00");return}
+ const id="d"+uid();DB.doctors.push({id,name:n,qual:q,exp:ex,langs:lg,fee,slots,reg:"pending",regno:rn,council:cn,email:e,phone:ph,since:new Date().toISOString()});
+ mkLogin("doctor",id,n,e);save();toast("Doctor onboarded. Registration is pending verification.");S.fold.ad_doc=true;render()
+}
 function onboardClinic(){
  const n=val("ob_cn"),city=val("ob_cc"),st=val("ob_cs"),rg=val("ob_cr"),dn=val("ob_cd"),dr=val("ob_cp"),e=val("ob_ce").toLowerCase(),ph=val("ob_cph"),ad=val("ob_ca");
  if(n.length<3){toast("Enter the clinic name");return}
@@ -108,11 +123,15 @@ function onboardClinic(){
  mkLogin("clinic",id,n,e);save();toast("Clinic onboarded. Record an audit before it can take bookings.");S.fold.ad_aud=true;render()
 }
 VIEWS["admin.onboard"]=()=>{
- const cr=S.cred,pendS=DB.suppliers.filter(x=>x.status==="pending").length,pendC=DB.clinics.filter(x=>x.status==="pending").length;
+ const cr=S.cred,pendD=DB.doctors.filter(x=>x.reg!=="verified").length,pendS=DB.suppliers.filter(x=>x.status==="pending").length,pendC=DB.clinics.filter(x=>x.status==="pending").length;
  const f=(id,l,ph,t)=>`<label class="sm">${l}<br><input id="${id}" ${t?`type="${t}"`:""} placeholder="${E(ph||l)}"></label>`;
  const procs=Object.keys(PROC_INFO).map((t,i)=>`<div class="fl"><label class="ck" style="flex:1"><input type="checkbox" id="obt_${i}"><span>${E(t)}</span></label><input id="obp_${i}" type="number" min="1" max="100000" placeholder="Price ₹" aria-label="Price for ${E(t)}" style="width:96px"></div>`).join("");
- return `<h2>Onboarding</h2><p class="mu sm">Add a new supplier or clinic. Each gets a login and then goes through verification or audit before it can sell or take bookings. ${pendS} supplier${pendS===1?"":"s"} and ${pendC} clinic${pendC===1?"":"s"} awaiting verification.</p>
+ return `<h2>Onboarding</h2><p class="mu sm">Add a new doctor, supplier or clinic. Each gets a login and then goes through verification or audit before it can see patients, sell or take bookings. ${pendD} doctor${pendD===1?"":"s"}, ${pendS} supplier${pendS===1?"":"s"} and ${pendC} clinic${pendC===1?"":"s"} awaiting verification.</p>
  ${cr?`<div class="good" role="status"><b>Login created for ${E(cr.name)}.</b><br>Email: ${E(cr.email)}<br>Temporary password: <b>${E(cr.pw)}</b><br><span class="sm">Share this with them now. It is not shown again.</span><br><button class="btn g s" onclick="NC.dismissCred()">Done, hide it</button></div>`:""}
+ ${fold("ob_doc","Onboard a doctor",`<div class="grid" style="gap:8px">${f("ob_dn","Doctor full name")}${f("ob_dq","Qualification","BAMS, MD (Kayachikitsa)")}${f("ob_dx","Years of experience","","number")}${f("ob_dl","Languages","English, Hindi")}${f("ob_df","Consultation fee ₹","","number")}${f("ob_dr","State council registration number")}${f("ob_dc","State Ayurveda council")}${f("ob_de","Contact email","name@example.com","email")}${f("ob_dp","Contact phone","","tel")}</div>
+  <label class="sm" style="display:block;margin-top:8px">Weekly slots, comma separated<br><input id="ob_ds" placeholder="Mon 10:00, Wed 17:00"></label>
+  <p class="mu sm">The doctor stays unverified, and patients cannot book them, until you mark the registration verified under Verification.</p>
+  <button class="btn" onclick="NC.onboardDoc()">Onboard doctor</button>`,true)}
  ${fold("ob_sup","Onboard a supplier",`<div class="grid" style="gap:8px">${f("ob_sn","Company name")}${f("ob_sc","Contact person")}${f("ob_se","Contact email","name@company.com","email")}${f("ob_sp","Contact phone","","tel")}${f("ob_ss","State")}${f("ob_sl","Drug manufacturing licence number")}${f("ob_sg","GMP certificate details (optional now)","Certificate and valid-to date")}</div>
   <label class="ck"><input type="checkbox" id="ob_sr"><span>Batch test report received (optional now)</span></label>
   <p class="mu sm">The licence number is required. Missing documents keep the supplier in the verification queue until they are provided.</p>
@@ -121,11 +140,11 @@ VIEWS["admin.onboard"]=()=>{
   <p class="sm" style="margin-top:8px"><b>Treatments offered and prices</b></p>${procs}
   <p class="mu sm">A new clinic cannot take bookings until you record an SOP audit scoring 80% or more under Verification.</p>
   <button class="btn" onclick="NC.onboardClinic()">Onboard clinic</button>`,false)}
- ${fold("ob_list","Onboarded logins ("+DB.users.filter(u=>u.role==="supplier"||u.role==="clinic").length+")",`<table><tr><th>Name</th><th>Role</th><th>Email</th></tr>${DB.users.filter(u=>u.role==="supplier"||u.role==="clinic").map(u=>`<tr><td class="sm">${E(u.name)}</td><td class="sm">${E(roleName(u.role))}</td><td class="sm">${E(u.email)}</td></tr>`).join("")}</table>`,false)}`;
+ ${fold("ob_list","Onboarded logins ("+DB.users.filter(u=>u.role!=="patient"&&u.role!=="admin").length+")",`<table><tr><th>Name</th><th>Role</th><th>Email</th></tr>${DB.users.filter(u=>u.role!=="patient"&&u.role!=="admin").map(u=>`<tr><td class="sm">${E(u.name)}</td><td class="sm">${E(roleName(u.role))}</td><td class="sm">${E(u.email)}</td></tr>`).join("")}</table>`,false)}`;
 };
 function dismissCred(){S.cred=null;render()}
 VIEWS["admin.cat"]=()=>catView(DB,inr);
 const _done=window.onAssessmentDone;window.onAssessmentDone=s=>{_done(s);startedThisRun0=false;maxReach=-1;
  const m=DB.metrics;m.reach=m.reach||[];if(Q.length){m.reach[Q.length]=(m.reach[Q.length]||0)}save()};
-return {get DB(){return DB},authTab,doLogin,doRegister,demoMode,logout,onboardSup,onboardClinic,dismissCred,foldSet,rejectProd,nextGo,render,setRole,setTab,setStage,goto,setCtx,reqLead,pickSlot,confirmBook,placeOrder,bookClinic,logFollow,setRemind,bookReview,openCase,closeCase,dr,drTest,drAddMed,drDelMed,pickAgree,drOtherTest,drAddTreat,drDelTreat,issueRx,markLead,pickPlan,submitSup,addProduct,setOrder,setBooking,saveAudit,verifyDoc,approveSup,approveProd,recordAudit,saveSettings,resetAll,sim};
+return {get DB(){return DB},authTab,doLogin,doRegister,demoMode,logout,onboardSup,onboardClinic,onboardDoc,dismissCred,foldSet,rejectProd,nextGo,render,setRole,setTab,setStage,goto,setCtx,reqLead,pickSlot,confirmBook,placeOrder,bookClinic,logFollow,setRemind,bookReview,openCase,closeCase,dr,drTest,drAddMed,drDelMed,pickAgree,drOtherTest,drAddTreat,drDelTreat,issueRx,markLead,pickPlan,submitSup,addProduct,setOrder,setBooking,saveAudit,verifyDoc,approveSup,approveProd,recordAudit,saveSettings,resetAll,sim};
 })();
