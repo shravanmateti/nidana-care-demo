@@ -51,7 +51,7 @@ label.ck{padding:4px 0}
 select,input,textarea{font-size:16px;min-height:44px}
 .pills,.stgb{gap:8px}
 table.stk,table.stk tbody,table.stk tr,table.stk td{display:block;width:100%}
-table.stk tr:first-child{display:none}
+table.stk tr:first-child{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);padding:0;border:0}
 table.stk tr{padding:10px 0;border-bottom:1px solid var(--ln)}
 table.stk td{border:0;padding:3px 0}
 table.stk td[data-l]:before{content:attr(data-l);display:block;font-size:12px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.03em}

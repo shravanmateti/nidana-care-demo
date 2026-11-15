@@ -104,7 +104,7 @@ function render(){
 function stackTables(root){
  root.querySelectorAll("table").forEach(t=>{
   const h=t.rows[0];if(!h||!h.cells.length||![...h.cells].every(c=>c.tagName==="TH")||h.cells.length<3)return;
-  const L=[...h.cells].map(c=>c.textContent.trim());t.classList.add("stk");
+  const L=[...h.cells].map(c=>c.textContent.trim());t.classList.add("stk");t.setAttribute("role","table");[...t.rows].forEach((r,ri)=>{r.setAttribute("role","row");[...r.cells].forEach(c=>c.setAttribute("role",ri?"cell":"columnheader"))});
   [...t.rows].slice(1).forEach(r=>[...r.cells].forEach((c,i)=>{if(L[i])c.setAttribute("data-l",L[i])}));
  });
 }
