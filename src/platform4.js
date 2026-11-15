@@ -11,23 +11,28 @@ VIEWS["admin.funnel"]=()=>{
  <div class="card"><h3>Where people stop</h3>${reach.length?`<table><tr><th>Question</th><th>Reached it</th></tr>${Q.map((q,i)=>`<tr><td class="sm">${i+1}. ${E(q.q)}</td><td>${reach[i]||0}</td></tr>`).join("")}</table>`:`<p class="mu sm">Fills in as people use the assessment.</p>`}</div>`;
 };
 VIEWS["admin.verify"]=()=>{
- let h=`<h2>Verification queue</h2><div class="card"><h3>Doctors</h3><table><tr><th>Doctor</th><th>Registration no.</th><th>Status</th><th></th></tr>${DB.doctors.map(d=>`<tr><td>${E(d.name)}<br><span class="mu sm">${E(d.qual)}</span></td><td class="sm">${E(d.regno)}</td><td><span class="tag ${d.reg==="verified"?"g":"a"}">${d.reg}</span></td><td>${d.reg!=="verified"?`<button class="btn s" onclick="NC.verifyDoc('${d.id}')">Mark verified</button>`:""}</td></tr>`).join("")}</table>
- <p class="mu sm">In the real product: check the number against the state Ayurveda council register and the practitioner's telemedicine course certificate.</p></div>`;
+ let h=`<h2>Verification queue</h2>${fold("ad_doc","Doctors",`<table><tr><th>Doctor</th><th>Registration no.</th><th>Status</th><th></th></tr>${DB.doctors.map(d=>`<tr><td>${E(d.name)}<br><span class="mu sm">${E(d.qual)}</span></td><td class="sm">${E(d.regno)}</td><td><span class="tag ${d.reg==="verified"?"g":"a"}">${d.reg}</span></td><td>${d.reg!=="verified"?`<button class="btn s" onclick="NC.verifyDoc('${d.id}')">Mark verified</button>`:""}</td></tr>`).join("")}</table>
+ <p class="mu sm">In the real product: check the number against the state Ayurveda council register and the practitioner's telemedicine course certificate.</p>`,true)}`;
  if(S.stage>=2){
-  h+=`<div class="card"><h3>Suppliers</h3>${DB.suppliers.map(s=>{const miss=[!s.licence&&"licence",!s.gmp&&"GMP certificate",!s.report&&"batch test report"].filter(Boolean);
+  h+=fold("ad_sup","Suppliers",`${DB.suppliers.map(s=>{const miss=[!s.licence&&"licence",!s.gmp&&"GMP certificate",!s.report&&"batch test report"].filter(Boolean);
    return `<div style="border-top:1px solid var(--ln);padding:8px 0"><b>${E(s.name)}</b> <span class="tag ${s.status==="verified"?"g":"a"}">${s.status}</span><p class="sm">Licence: ${E(s.licence||"missing")}<br>GMP: ${E(s.gmp||"missing")}<br>Batch test report: ${s.report?"provided":"missing"}</p>
-   ${s.status!=="verified"?(miss.length?`<span class="mu sm">Cannot approve. Missing: ${miss.join(", ")}.</span>`:`<button class="btn s" onclick="NC.approveSup('${s.id}')">Approve supplier</button>`):""}</div>`}).join("")}</div>
-  <div class="card"><h3>Products awaiting approval</h3>${DB.products.filter(p=>p.status==="pending").map(p=>{const sv=sup(p.sup).status==="verified";return `<div class="fl"><span class="sm" style="flex:1"><b>${E(p.name)}</b> · ${E(sup(p.sup).name)} · batch ${E(p.batch||"missing")}</span>${sv&&p.batch&&(!p.hm||p.ht)?`<button class="btn s" onclick="NC.approveProd('${p.id}')">Approve</button>`:`<span class="tag a">supplier, batch or heavy-metal assay not ready</span>`}</div>`}).join("")||`<p class="mu sm">None pending.</p>`}</div>`;
+   ${s.status!=="verified"?(miss.length?`<span class="mu sm">Cannot approve. Missing: ${miss.join(", ")}.</span>`:`<button class="btn s" onclick="NC.approveSup('${s.id}')">Approve supplier</button>`):""}</div>`}).join("")}`,DB.suppliers.some(s=>s.status!=="verified"))+
+  fold("ad_prod","Products awaiting approval ("+DB.products.filter(p=>p.status==="pending").length+")",`${DB.products.filter(p=>p.status==="pending").map(p=>{const sv=sup(p.sup).status==="verified";return `<div class="fl"><span class="sm" style="flex:1"><b>${E(p.name)}</b> · ${E(sup(p.sup).name)} · batch ${E(p.batch||"missing")}${p.hm?`<br>Heavy-metal assay: ${p.assay?E(p.assay.lab)+", report "+E(p.assay.no)+", "+E(p.assay.date):(p.ht?"declared, no details on file":"missing")}`:""}</span>${sv&&p.batch&&(!p.hm||p.ht)?`<button class="btn s" onclick="NC.approveProd('${p.id}')">Approve</button>`:`<span class="tag a">supplier, batch or heavy-metal assay not ready</span>`}<input id="rj_${p.id}" placeholder="Reason to reject" aria-label="Reason to reject ${E(p.name)}" style="flex:1;min-width:140px"><button class="btn g s" onclick="NC.rejectProd('${p.id}')">Reject</button></div>`}).join("")||`<p class="mu sm">None pending.</p>`}`,DB.products.some(p=>p.status==="pending"));
  }
  if(S.stage>=3){
-  h+=`<div class="card"><h3>Clinic audits</h3><table><tr><th>Clinic</th><th>Score</th><th>Status</th><th>Record audit</th></tr>${DB.clinics.map(c=>{const sa=DB.audits.filter(a=>a.clinic===c.id&&a.by==="self").slice(-1)[0];return `<tr><td class="sm">${E(c.name)}<br><span class="mu">last ${fd(c.last)}${sa?" · self-check "+sa.score+"%":""}</span></td><td>${c.score}%</td><td><span class="tag ${c.status==="audited"?"g":"w"}">${c.status}</span></td><td><div class="fl"><input id="as_${c.id}" type="number" min="0" max="100" style="width:70px" placeholder="%"><button class="btn s" onclick="NC.recordAudit('${c.id}')">Save</button></div></td></tr>`}).join("")}</table>
-  <p class="mu sm">Rule used here: 80% and above is a bookable partner, 60 to 79% is probation, below 60% is suspended. Change it to match your policy.</p></div>`;
+  h+=fold("ad_aud","Clinic audits",`<table><tr><th>Clinic</th><th>Score</th><th>Status</th><th>Record audit</th></tr>${DB.clinics.map(c=>{const sa=DB.audits.filter(a=>a.clinic===c.id&&a.by==="self").slice(-1)[0];return `<tr><td class="sm">${E(c.name)}<br><span class="mu">last ${fd(c.last)}${sa?" · self-check "+sa.score+"%":""}</span></td><td>${c.score}%</td><td><span class="tag ${c.status==="audited"?"g":"w"}">${c.status}</span></td><td><div class="fl"><input id="as_${c.id}" type="number" min="0" max="100" style="width:70px" placeholder="%"><button class="btn s" onclick="NC.recordAudit('${c.id}')">Save</button></div></td></tr>`}).join("")}</table>
+  <p class="mu sm">Rule used here: 80% and above is a bookable partner, 60 to 79% is probation, below 60% is suspended. Change it to match your policy.</p>`,false);
  }
  return h;
 };
 function verifyDoc(id){doc(id).reg="verified";save();render()}
-function approveSup(id){sup(id).status="verified";save();render()}
-function approveProd(id){prod(id).status="approved";save();render()}
+function approveSup(id){const s=sup(id);if(!s.licence||!s.gmp||!s.report){toast("Cannot approve: licence, GMP certificate and batch test report are all needed");return}s.status="verified";save();render()}
+function approveProd(id){const p=prod(id);
+ if(!p||sup(p.sup).status!=="verified"){toast("Cannot approve: the supplier is not verified");return}
+ if(!p.batch){toast("Cannot approve: batch number missing");return}
+ if(p.hm&&!p.ht){toast("Cannot approve: herbo-mineral products need a heavy-metal assay");return}
+ p.status="approved";save();render()}
+function rejectProd(id){const p=prod(id);if(!p)return;const el=$("rj_"+id),r=el?el.value.trim():"";if(!r){toast("Write a short reason for the supplier");return}p.status="rejected";p.reason=r;save();render()}
 function recordAudit(id){
  const v=parseInt($("as_"+id).value,10);if(isNaN(v)||v<0||v>100){toast("Enter a score from 0 to 100");return}
  const c=cli(id);c.score=v;c.last=new Date().toISOString();c.status=v>=80?"audited":v>=60?"probation":"suspended";
@@ -69,5 +74,5 @@ let maxReach=-1,startedThisRun0=false;
 VIEWS["admin.cat"]=()=>catView(DB,inr);
 const _done=window.onAssessmentDone;window.onAssessmentDone=s=>{_done(s);startedThisRun0=false;maxReach=-1;
  const m=DB.metrics;m.reach=m.reach||[];if(Q.length){m.reach[Q.length]=(m.reach[Q.length]||0)}save()};
-return {get DB(){return DB},nextGo,render,setRole,setTab,setStage,goto,setCtx,reqLead,pickSlot,confirmBook,placeOrder,bookClinic,logFollow,setRemind,bookReview,openCase,closeCase,dr,drTest,drAddMed,drDelMed,pickAgree,drOtherTest,drAddTreat,drDelTreat,issueRx,markLead,pickPlan,submitSup,addProduct,setOrder,setBooking,saveAudit,verifyDoc,approveSup,approveProd,recordAudit,saveSettings,resetAll,sim};
+return {get DB(){return DB},foldSet,rejectProd,nextGo,render,setRole,setTab,setStage,goto,setCtx,reqLead,pickSlot,confirmBook,placeOrder,bookClinic,logFollow,setRemind,bookReview,openCase,closeCase,dr,drTest,drAddMed,drDelMed,pickAgree,drOtherTest,drAddTreat,drDelTreat,issueRx,markLead,pickPlan,submitSup,addProduct,setOrder,setBooking,saveAudit,verifyDoc,approveSup,approveProd,recordAudit,saveSettings,resetAll,sim};
 })();

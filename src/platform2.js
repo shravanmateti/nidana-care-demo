@@ -23,6 +23,7 @@ VIEWS["patient.book"]=()=>{
 function pickSlot(d,s){S.pick={d,s};render()}
 function confirmBook(){
  const a=lastA(),d=doc(S.pick.d);if(!d)return;
+ if(d.reg!=="verified"){toast("This doctor is not verified yet");return}
  DB.appts.push({id:uid(),doctor:d.id,slot:S.pick.s,assess:a.id,status:"booked",fee:d.fee,when:new Date().toISOString()});
  S.pick={};save();toast("Booked (mock payment)");goto("patient","care");
 }
@@ -55,6 +56,8 @@ VIEWS["patient.meds"]=()=>{
 };
 function placeOrder(rid){
  const r=DB.rx.find(x=>x.id===rid),by={};
+ const bad=r.meds.find(m=>{const p=prod(m.pid);return !p||p.status!=="approved"||sup(p.sup).status!=="verified"||(p.hm&&!p.ht)});
+ if(bad){toast("A product on this prescription is not approved, so the order cannot be placed");return}
  r.meds.forEach(m=>{const p=prod(m.pid);(by[p.sup]=by[p.sup]||[]).push(m)});
  Object.keys(by).forEach(s=>{const items=by[s].map(m=>({pid:m.pid,qty:m.qty}));DB.orders.push({id:uid(),rx:rid,sup:s,items,total:items.reduce((t,i)=>t+prod(i.pid).price*i.qty,0),status:"placed",when:new Date().toISOString()})});
  save();toast("Order placed (mock)");render();scrollTo(0,0);
@@ -72,8 +75,10 @@ VIEWS["patient.clinic"]=()=>{
   ${ok&&off?`<div class="fl"><label class="sm">Date <input type="date" id="bd_${c.id}" value="${isoDay(addDays(new Date(),1))}" min="${isoDay(new Date())}"></label><button class="btn s" onclick="NC.bookClinic('${r.id}','${c.id}')">Book · ${inr(tot)}</button></div>`:""}</div>`}).join("")}</div>`}`;
 };
 function bookClinic(rid,cid){
- const d=$("bd_"+cid).value;if(!d){toast("Pick a date");return}
  const r=DB.rx.find(x=>x.id===rid),c=cli(cid);
+ if(c.status!=="audited"){toast("This clinic is not bookable: audit score below 80%");return}
+ const d=($("bd_"+cid)||{}).value;if(!d){toast("Pick a date");return}
+ const ap0=DB.appts.find(x=>x.id===r.appt);if(ap0&&catPreg(aById(ap0.assess))&&r.treat.some(t=>PROC_INFO[t.name]&&PROC_INFO[t.name].sh)){toast("Shodhana is not allowed when pregnancy or recent delivery is reported");return}
  const items=r.treat.map(t=>({name:t.name,sessions:t.sessions,price:c.treat[t.name]}));
  if(items.some(i=>!i.price)){toast("This clinic does not offer every advised treatment");return}
  DB.tbook.push({id:uid(),rx:rid,clinic:cid,items,total:items.reduce((t,i)=>t+i.price*i.sessions,0),date:d,status:"booked",when:new Date().toISOString()});

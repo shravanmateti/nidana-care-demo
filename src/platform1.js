@@ -46,7 +46,7 @@ let DB;
 function load(){try{const s=localStorage.getItem(LS);if(s)return JSON.parse(s)}catch(e){}return seed()}
 function save(){try{localStorage.setItem(LS,JSON.stringify(DB))}catch(e){}}
 DB=load();
-const S={role:"patient",tab:"assess",stage:4,doc:"d1",sup:"s1",cli:"c1",caseId:null,pick:{},draft:null};
+const S={role:"patient",tab:"assess",stage:4,doc:"d1",sup:"s1",cli:"c1",caseId:null,pick:{},draft:null,fold:{}};
 const $=id=>document.getElementById(id);
 const doc=id=>DB.doctors.find(x=>x.id===id),sup=id=>DB.suppliers.find(x=>x.id===id),prod=id=>DB.products.find(x=>x.id===id),cli=id=>DB.clinics.find(x=>x.id===id);
 const lastA=()=>DB.assessments[DB.assessments.length-1];
@@ -97,10 +97,15 @@ function render(){
  const f=VIEWS[S.role+"."+S.tab];
  if(S.role==="patient"&&S.tab==="assess"){mountAssess(v);return}
  v.innerHTML=f?f():"";
- stackTables(v);
+ stackTables(v);labelAll(root);
  if(S.role==="admin"&&S.tab==="revenue")sim();
 }
 /* mobile: label cells so CSS can stack wide tables (3+ columns with a header row) */
+/* collapsible card; open state is remembered in S.fold so a re-render does not collapse it again. Closed by default on phones unless open===true */
+function fold(k,t,b,open){const op=(k in S.fold)?S.fold[k]:(innerWidth>700||open===true);return `<details class="card" ${op?"open":""} ontoggle="NC.foldSet('${k}',this.open)"><summary><h3 style="display:inline">${t}</h3></summary>${b}</details>`}
+function foldSet(k,o){S.fold[k]=o}
+/* give every unlabelled field an accessible name */
+function labelAll(r){r.querySelectorAll("input,select,textarea").forEach(e=>{if(e.type==="checkbox"||e.type==="radio"||e.type==="hidden")return;if((e.labels&&e.labels.length)||e.getAttribute("aria-label"))return;const t=e.placeholder||(e.tagName==="SELECT"&&e.options[0]&&e.options[0].text)||e.title||e.name||e.id;if(t)e.setAttribute("aria-label",t)})}
 function stackTables(root){
  root.querySelectorAll("table").forEach(t=>{
   const h=t.rows[0];if(!h||!h.cells.length||![...h.cells].every(c=>c.tagName==="TH")||h.cells.length<3)return;
