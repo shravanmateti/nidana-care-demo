@@ -119,6 +119,30 @@ const {chromium}=require('playwright');
  await p.evaluate(()=>NC.logout());await login(p,'nirmal@clinic.test',cr[1]);
  T('new clinic can log in with the temporary password',(await txt(p)).includes('Nirmal Ayurveda Clinic')&&(await txt(p)).includes('(Clinic)'));
  T('no JS errors in onboarding run',p.errs.length===0,p.errs.join('|'));
+ // ---- 5. admin onboards a doctor
+ p=await mk(false);await login(p,'admin@nidana.demo',PW);await p.evaluate(()=>NC.setTab('onboard'));
+ await p.evaluate(()=>document.querySelectorAll('#view details').forEach(d=>d.open=true));
+ const doc=async o=>{await setv(p,Object.assign({ob_dn:'Dr. Anita Joshi',ob_dq:'BAMS, MD (Kayachikitsa)',ob_dx:'9',ob_dl:'English, Marathi',ob_df:'450',ob_dr:'MH-AYU-77120',ob_dc:'Maharashtra Council of Indian Medicine',ob_de:'anita@doc.test',ob_dp:'9833344455',ob_ds:'Mon 10:00, Wed 17:00'},o));const n=await p.evaluate(()=>NC.DB.doctors.length);await p.evaluate(()=>NC.onboardDoc());return p.evaluate(n=>NC.DB.doctors.length-n,n)};
+ T('doctor must hold a BAMS qualification',(await doc({ob_dq:'MBBS'}))===0);
+ T('doctor fee must be sensible',(await doc({ob_df:'5'}))===0);
+ T('doctor needs a registration number',(await doc({ob_dr:'1'}))===0);
+ T('doctor registration number must be new',(await doc({ob_dr:'SAMPLE-KL-1001'}))===0);
+ T('doctor slots must be well formed',(await doc({ob_ds:'tomorrow morning'}))===0);
+ T('doctor needs a valid email',(await doc({ob_de:'x'}))===0);
+ T('valid doctor is onboarded as pending',(await doc({}))===1&&await p.evaluate(()=>NC.DB.doctors.at(-1).reg==='pending'));
+ cr=await p.evaluate(()=>document.body.innerText.match(/Temporary password: (\S+)/));T('doctor credentials shown once',!!cr);
+ const did=await p.evaluate(()=>NC.DB.doctors.at(-1).id);
+ T('doctor without registration number cannot be verified',await p.evaluate(i=>{const d=NC.DB.doctors.find(x=>x.id===i);const k=d.regno;d.regno='';NC.verifyDoc(i);const r=d.reg==='pending';d.regno=k;return r},did));
+ // patient cannot book the pending doctor, can after verification
+ const q2=await mk(true);await q2.evaluate(()=>alSet('backpain'));const n2=await q2.evaluate(()=>alSteps().length);for(let k=0;k<n2;k++){const o=await q2.$$('button.opt');await o[0].click();await q2.click(k<n2-1?'text=Next':'text=See summary')}
+ const book=async()=>q2.evaluate(()=>{const D=NC.DB,d=D.doctors.at(-1),n=D.appts.length;NC.pickSlot(d.id,d.slots[0]);NC.confirmBook();return D.appts.length-n});
+ await q2.evaluate(()=>{NC.DB.doctors.push({id:'dz',name:'Dr. Test Pending',qual:'BAMS',exp:1,langs:'English',fee:300,slots:['Mon 10:00'],reg:'pending',regno:'ZZ-12345'})});
+ T('patient cannot book an unverified doctor',(await book())===0);
+ await q2.evaluate(()=>{NC.verifyDoc('dz')});T('patient can book once the admin verifies the doctor',(await book())===1);
+ // new doctor logs in
+ await p.evaluate(()=>NC.logout());await login(p,'anita@doc.test',cr[1]);
+ T('new doctor can log in with the temporary password',(await txt(p)).includes('Anita Joshi')&&(await txt(p)).includes('(Doctor)'));
+ T('no JS errors in doctor onboarding run',p.errs.length===0,p.errs.join('|'));
  // phone width: login page and onboarding page do not overflow
  for(const w of [375,390]){const q=await mk(false,w);const o1=await q.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1);await login(q,'admin@nidana.demo',PW);await q.evaluate(()=>NC.setTab('onboard'));await q.evaluate(()=>document.querySelectorAll('#view details').forEach(d=>d.open=true));const o2=await q.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1);T('no sideways scroll at '+w+'px (login and onboarding)',!o1&&!o2)}
  console.log(ok+' pass '+bad+' fail');await b.close();process.exit(bad?1:0)})();
