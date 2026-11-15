@@ -11,7 +11,7 @@ const {chromium}=require('playwright');
  await p.click('.pills button:has-text("Book a doctor")');
  await p.click('button:has-text("Mon 10:00")');await p.click('button:has-text("Confirm Mon 10:00")');
  await p.click('button:has-text("Doctor")');await p.click('button:has-text("Appointments")');await p.click('text=Open case sheet');
- await p.click('button:has-text("Agree")');await p.fill('textarea','ok');await p.click('text=Issue prescription and complete consult');
+  await p.evaluate(()=>document.querySelectorAll('#view details').forEach(d=>d.open=true));await p.click('button:has-text("Agree")');await p.fill('textarea','ok');await p.click('text=Issue prescription and complete consult');
  await p.click('button:has-text("Patient")');await p.click('.pills button:has-text("Follow-up")');
  let t=await T();
  ok('date inputs present',await p.$('#fdte')!==null&&await p.$('#rmd')!==null&&await p.$('#rdd')!==null);

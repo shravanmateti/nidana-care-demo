@@ -34,6 +34,7 @@ const {chromium}=require('playwright');
  await p.evaluate(()=>NC.openCase('ap1'));
  t=await p.innerText('body');
  ok('preg warning on case sheet',t.includes('Pregnancy or recent delivery reported'));
+ await p.evaluate(()=>document.querySelectorAll('#view details').forEach(d=>d.open=true));
  const dis=await p.evaluate(()=>[...document.querySelectorAll('#tp option')].filter(o=>o.disabled).map(o=>o.textContent));
  ok('shodhana disabled when pregnant: '+dis.length,dis.length>=5&&dis.includes('Virechana (therapeutic purgation)'));
  const grp=await p.evaluate(()=>[...document.querySelectorAll('#mp optgroup')].map(g=>g.label+':'+g.children.length));

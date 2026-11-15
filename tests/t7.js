@@ -24,6 +24,7 @@ const {chromium}=require('playwright');
  await p.click('button:has-text("Agree")');
  T('error cleared on agree',await p.evaluate(()=>!document.getElementById('agErr')));
  await p.check('text=Uric acid');
+ await p.evaluate(()=>document.querySelectorAll('#view details').forEach(d=>d.open=true));
  await p.selectOption('#mp',{index:1});await p.fill('#md','as directed, 4 weeks');await p.click('button:has-text("Add"):near(#mq)');
  await p.selectOption('#tp',{index:1});await p.click('button:has-text("Add"):near(#ts)');
  await p.click('text=Issue prescription');
