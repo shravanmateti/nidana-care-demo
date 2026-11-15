@@ -99,3 +99,23 @@ Items 1, 2 (evidence fields), 3, 4, 4b, 5 and 6 are done and covered by `tests/t
 | 4, 4b | Sections fold on phones and remember their state. Phone heights: supplier Products 4,357 to 1,329px, admin Verification 3,146 to 2,464px, doctor case sheet 2,744 to 2,505px. "Issue prescription" is a sticky bar |
 | 5 | Every field gets an accessible name, and source links are at least 40px tall on phones |
 | 6 | `package.json`, `tests/run.js` and a GitHub Actions workflow. t5 runs nightly |
+
+## 8. Round 2: analysis for every ailment, login, registration and onboarding
+
+Date: 15 Nov 2026. Four requests were built and tested: (1) the detailed analysis that hair fall had is now given for every other ailment, (2) a login page and patient registration, (3) admin onboarding of new suppliers, (4) admin onboarding of new clinics.
+
+| Area | What was built | How it was tested |
+|---|---|---|
+| Detailed analysis | For all 30 non-hair ailments the patient sees urgency, symptoms reported, contributing factors (Nidana), how it may have developed (Samprapti), a digestion and routine strain count, outlook, what to do now, and how to prepare, with the tests list. The doctor sees the same under "Detailed analysis" on the case sheet. No dosha score is made up. | t10: every ailment shows all seven sections; a warning-sign answer raises urgency to "See a doctor soon" and calm answers stay "Routine"; analysis is stored with the assessment; copy text includes it. |
+| Login and registration | The app opens on a login page. Patients register with name, mobile, email and password (8+ characters, letters and a number, confirm field, age and prototype consent). Wrong passwords are refused, 5 failures lock the form for 30 seconds, duplicates are refused, sessions survive a reload, logout works. Real users are locked to their own role. "Explore the demo" keeps the five-role switcher. | t10: 20 checks on validation, lockout, role lock, logout, reload, plus logins for admin, doctor, supplier and clinic. |
+| Supplier onboarding | Admin > Onboarding > supplier form: company, contact, email, phone, state, licence number (required), GMP details and batch report (optional now). Creates a pending supplier and a login with a one-time temporary password. Approval still needs licence, GMP and report. | t10 and the end-to-end run: bad email, phone, licence, duplicate licence and email are refused; new supplier logs in, lists a product, admin approves it. |
+| Clinic onboarding | Admin > Onboarding > clinic form: name, city, state, registration number, BAMS physician and registration number, contact, treatments with prices. Creates a clinic with status pending and score 0, and a login. It cannot take bookings until an audit of 80% or more is recorded. | t10 and the end-to-end run: validation, duplicate registration number, pending clinic cannot be booked, audit makes it bookable, clinic logs in. |
+
+**Results:** t2, t3, t4, t6, t7, t8, t9 and the new t10 (62 checks) all pass, t5 (all 31 flows) passes, and a 13-step end-to-end run across patient, doctor, admin, supplier and clinic logins passes. No console errors. No sideways scroll on the login or onboarding pages at 375px and 390px.
+
+**Limits, stated plainly:**
+- Passwords use a demo-only hash and live in the browser. This is not real security. Real accounts need a server.
+- The prototype keeps one patient record per browser, so two patient accounts in the same browser share assessments and bookings.
+- There is no password reset or change. Admin can use "Reset all data" in Settings.
+- The analysis uses general classical principles and the patient's own answers. It has not been reviewed by a Vaidya, and the contributing-factor wording needs that review before real use.
+- Doctors are still added only as sample data. Doctor onboarding would follow the same pattern as suppliers and clinics.
