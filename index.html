@@ -1003,9 +1003,65 @@ function enterAs(U){S.role=U.role;S.tab=TABS[U.role][0][0];S.caseId=null;if(U.ro
 const okEmail=e=>/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e);
 const okPhone=p=>/^[0-9+\- ]{8,15}$/.test(p);
 const okPw=p=>p.length>=8&&/[A-Za-z]/.test(p)&&/[0-9]/.test(p);
-function authTab(t){S.auth.tab=t;S.auth.err="";render()}
+function authTab(t){S.auth.tab=t;S.auth.err="";S.auth.reset=null;render()}
 function authErr(m){S.auth.err=m;const e=$("authErr");if(e){e.textContent=m;e.hidden=!m}else render();const f=$("authErr");if(f)f.focus&&f.focus()}
+function resetHtml(){
+ const a=S.auth,r=a.reset;
+ return `<div class="top"><div class="brand"><b>Nidana Care</b><span class="badge">Prototype · sample data · no real payments · not for clinical use</span></div></div>
+ <div class="auth"><h1>Reset your password</h1><div class="card">
+ ${r&&r.sent?`<p class="sm">If an account exists for <b>${E(r.email)}</b>, a 6-digit code has been created.</p>
+ ${r.code?`<div class="good" role="status"><b>Prototype only:</b> no email is sent, so your code is shown here: <b>${E(r.code)}</b><br><span class="sm">It works once and expires in 10 minutes. A real app would email it.</span></div>`:""}
+ <label class="sm">Code<br><input id="rs_c" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code"></label>
+ <label class="sm">New password (8 or more characters, letters and a number)<br><input id="rs_w" type="password" autocomplete="new-password" placeholder="New password"></label>
+ <label class="sm">Confirm new password<br><input id="rs_w2" type="password" autocomplete="new-password" placeholder="Confirm new password"></label>
+ <p id="authErr" class="warn sm" role="alert" tabindex="-1" ${a.err?"":"hidden"}>${E(a.err)}</p>
+ <button class="btn" style="width:100%" onclick="NC.doReset()">Set new password</button>`
+ :`<p class="sm">Enter the email you log in with.</p>
+ <label class="sm">Email<br><input id="rs_e" type="email" autocomplete="email" placeholder="Email address"></label>
+ <p id="authErr" class="warn sm" role="alert" tabindex="-1" ${a.err?"":"hidden"}>${E(a.err)}</p>
+ <button class="btn" style="width:100%" onclick="NC.sendReset()">Send reset code</button>`}
+ <p class="mu sm" style="margin-top:10px">Doctors, suppliers and clinics can also ask the admin to issue a new temporary password.</p>
+ <button class="btn g s" onclick="NC.authTab('login')">Back to log in</button>${r&&r.sent?` <button class="btn g s" onclick="NC.authTab('reset')">Start again</button>`:""}</div></div>`}
+function sendReset(){
+ const e=($("rs_e").value||"").trim().toLowerCase();if(!okEmail(e)){authErr("Enter a valid email address.");return}
+ const U=DB.users.find(u=>u.email===e);
+ S.auth.reset={email:e,sent:true,code:U?String(100000+Math.floor(Math.random()*900000)):"",exp:Date.now()+600000,tries:0};S.auth.err="";render()
+}
+function doReset(){
+ const a=S.auth,r=a.reset;if(!r)return;
+ const c=($("rs_c").value||"").trim(),w=$("rs_w").value||"",w2=$("rs_w2").value||"";
+ if(Date.now()>r.exp||!r.code){authErr("This code has expired or is not valid. Go back and ask for a new one.");return}
+ if(r.tries>=5){r.code="";authErr("Too many wrong codes. Ask for a new code.");return}
+ if(c!==r.code){r.tries++;authErr("That code is not correct.");return}
+ if(!okPw(w)){authErr("Password needs 8 or more characters with letters and a number.");return}
+ if(w!==w2){authErr("The two passwords do not match.");return}
+ const U=DB.users.find(u=>u.email===r.email);if(!U){authErr("This code has expired or is not valid.");return}
+ U.ph=hpw(U.email,w);delete U.tmp;save();a.reset=null;a.tab="login";a.err="";a.fails=0;a.until=0;render();toast("Password changed. Log in with the new one.")
+}
+function pwCard(U){
+ return `<div class="card" id="pwCard"><h3>Change password</h3>${U.tmp?`<p class="warn sm">You are using a temporary password. Please choose your own now.</p>`:""}
+ <label class="sm">Current password<br><input id="cp_o" type="password" autocomplete="current-password" placeholder="Current password"></label>
+ <label class="sm">New password (8 or more characters, letters and a number)<br><input id="cp_n" type="password" autocomplete="new-password" placeholder="New password"></label>
+ <label class="sm">Confirm new password<br><input id="cp_n2" type="password" autocomplete="new-password" placeholder="Confirm new password"></label>
+ <p id="pwErr" class="warn sm" role="alert" ${S.pwErr?"":"hidden"}>${E(S.pwErr||"")}</p>
+ <div class="fl"><button class="btn s" onclick="NC.changePw()">Save new password</button><button class="btn g s" onclick="NC.pwToggle()">Cancel</button></div></div>`}
+function pwToggle(){S.pwOpen=!S.pwOpen;S.pwErr="";render()}
+function changePw(){
+ const U=realUser();if(!U)return;
+ const o=$("cp_o").value||"",n=$("cp_n").value||"",n2=$("cp_n2").value||"";
+ const bad=m=>{S.pwErr=m;const e=$("pwErr");e.textContent=m;e.hidden=false};
+ if(U.ph!==hpw(U.email,o)){bad("Current password is not correct.");return}
+ if(!okPw(n)){bad("New password needs 8 or more characters with letters and a number.");return}
+ if(n!==n2){bad("The two new passwords do not match.");return}
+ if(n===o){bad("Choose a password different from the current one.");return}
+ U.ph=hpw(U.email,n);delete U.tmp;S.pwOpen=false;S.pwErr="";save();render();toast("Password changed")
+}
+function adminReset(id){
+ const U=DB.users.find(u=>u.id===id);if(!U||U.role==="admin"||U.role==="patient")return;
+ const pw=tmpPw();U.ph=hpw(U.email,pw);U.tmp=true;save();S.cred={role:U.role,name:U.name,email:U.email,pw,reset:true};render()
+}
 function authHtml(){
+ if(S.auth.tab==="reset")return resetHtml();
  const a=S.auth,reg=a.tab==="register";
  const demoRows=DB.users.filter(u=>u.demo).map(u=>`<tr><td>${E(roleName(u.role))}</td><td class="sm">${E(u.name)}</td><td class="sm">${E(u.email)}</td></tr>`).join("");
  return `<div class="top"><div class="brand"><b>Nidana Care</b><span class="badge">Prototype · sample data · no real payments · not for clinical use</span></div></div>
@@ -1021,6 +1077,7 @@ function authHtml(){
  <label class="ck"><input type="checkbox" id="rg_c"><span>I understand this is a prototype. My account stays in this browser only, and I will not enter real health details or a password I use elsewhere.</span></label>`:""}
  <p id="authErr" class="warn sm" role="alert" tabindex="-1" ${a.err?"":"hidden"}>${E(a.err)}</p>
  <button class="btn" style="width:100%" onclick="NC.${reg?"doRegister":"doLogin"}()">${reg?"Create account":"Log in"}</button>
+ ${reg?"":`<p class="sm" style="margin-top:8px"><button class="btn g s" onclick="NC.authTab('reset')">Forgot password?</button></p>`}
  <p class="mu sm" style="margin-top:10px">Doctors, suppliers and clinics do not register here. The admin onboards them and gives each a login.</p></div>
  <div class="card"><h3>Just looking around?</h3><p class="mu sm">Demo mode uses sample data and lets you switch between all five roles.</p><button class="btn g" style="width:100%" onclick="NC.demoMode()">Explore the demo</button></div>
  <details class="card"><summary><h3 style="display:inline">Sample logins for the demo</h3></summary><p class="mu sm">Password for all sample accounts: <b>${DEMO_PW}</b>. These are made-up accounts for this prototype only.</p><table><tr><th>Role</th><th>Name</th><th>Email</th></tr>${demoRows}</table></details></div>`}
@@ -1030,7 +1087,7 @@ function doLogin(){
  if(!e||!w){authErr("Enter your email and password.");return}
  const U=DB.users.find(u=>u.email===e&&u.ph===hpw(e,w));
  if(!U){a.fails++;if(a.fails>=5){a.until=Date.now()+30000;a.fails=0}authErr("Email or password is not correct.");return}
- a.fails=0;a.err="";DB.session={uid:U.id};save();enterAs(U);render();scrollTo(0,0);toast("Welcome, "+U.name)
+ a.fails=0;a.err="";DB.session={uid:U.id};S.pwOpen=!!U.tmp;S.pwErr="";save();enterAs(U);render();scrollTo(0,0);toast(U.tmp?"Please set your own password":"Welcome, "+U.name)
 }
 function doRegister(){
  const n=($("rg_n").value||"").trim(),p=($("rg_p").value||"").trim(),e=($("rg_e").value||"").trim().toLowerCase(),w=$("rg_w").value||"",w2=$("rg_w2").value||"";
@@ -1045,7 +1102,7 @@ function doRegister(){
  DB.patient={name:n,phone:p};DB.session={uid:U.id};S.auth.err="";save();enterAs(U);render();scrollTo(0,0);toast("Account created")
 }
 function demoMode(){DB.session={demo:true};save();S.auth.err="";render()}
-function logout(){DB.session=null;S.auth={tab:"login",err:"",fails:0,until:0};S.cred=null;save();render();scrollTo(0,0)}
+function logout(){DB.session=null;S.auth={tab:"login",err:"",fails:0,until:0};S.cred=null;S.pwOpen=false;save();render();scrollTo(0,0)}
 function render(){
  const root=$("root");
  if(DB.session&&!DB.session.demo&&!realUser())DB.session=null;
@@ -1054,11 +1111,11 @@ function render(){
  if(U&&S.role!==U.role)enterAs(U);
  const tabs=TABS[S.role];
  root.innerHTML=`<div class="top"><div class="brand"><b>Nidana Care</b><span class="badge">Prototype · sample data · no real payments · not for clinical use</span></div>
- <div class="acct">${U?`<span>Signed in as <b>${E(U.name)}</b> (${E(roleName(U.role))})</span> <button class="btn g s" onclick="NC.logout()">Log out</button>`:`<span>Demo mode: you can switch between all roles.</span> <button class="btn g s" onclick="NC.logout()">Log in or register</button>`}</div>
+ <div class="acct">${U?`<span>Signed in as <b>${E(U.name)}</b> (${E(roleName(U.role))})</span> <span><button class="btn g s" onclick="NC.pwToggle()">Change password</button> <button class="btn g s" onclick="NC.logout()">Log out</button></span>`:`<span>Demo mode: you can switch between all roles.</span> <button class="btn g s" onclick="NC.logout()">Log in or register</button>`}</div>
  ${U?"":`<div class="pills" role="tablist">${ROLES.map(r=>`<button class="${r[0]===S.role?"on":""}" onclick="NC.setRole('${r[0]}')">${r[1]}</button>`).join("")}${ctxSel()}</div>`}
  ${U&&U.role!=="admin"?"":`<details class="stg"><summary>Demo setting: rollout stage ${S.stage} · ${E(STAGES[S.stage].t)}</summary><div class="stgb">${STAGES.map(s=>`<button class="${s.n===S.stage?"on":""}" title="${E(s.t)}" onclick="NC.setStage(${s.n})">${s.n}</button>`).join("")}<span class="sm">${E(STAGES[S.stage].d)}</span></div></details>`}
  <div class="pills" style="margin-top:8px">${tabs.map(t=>`<button class="${t[0]===S.tab?"on":""} ${t[2]>S.stage?"lk":""}" onclick="NC.setTab('${t[0]}')">${E(t[1])}${t[2]>S.stage?" (Stage "+t[2]+")":""}</button>`).join("")}</div></div>
- <div id="nxtSlot">${nextBar()}</div><div id="view" style="margin-top:14px"></div>`;
+ ${U&&S.pwOpen?pwCard(U):""}<div id="nxtSlot">${nextBar()}</div><div id="view" style="margin-top:14px"></div>`;
  const v=$("view");
  const min=minOf(S.role,S.tab);
  if(min>S.stage){v.innerHTML=lockCard(min);return}
@@ -1252,7 +1309,7 @@ function bookReview(rid){
 const patName=()=>E(DB.patient.name);
 VIEWS["doctor.inbox"]=()=>{
  const ls=DB.leads.filter(l=>l.doctor===S.doc).slice().reverse();
- return `<h2>Requests from patients</h2><p class="mu">Stage 0: patients who finished the assessment and asked for a call. Call them back and note how often the pattern is right.</p>
+ return `${regCard()}<h2>Requests from patients</h2><p class="mu">Stage 0: patients who finished the assessment and asked for a call. Call them back and note how often the pattern is right.</p>
  ${ls.length?ls.map(l=>{const a=aById(l.assess);return `<div class="card"><h3>${patName()} · ${fd(l.when)} <span class="tag ${l.status==="new"?"a":"g"}">${l.status}</span></h3><p class="sm">Phone: <b>${E(l.phone)}</b></p>${a?sumHtml(a.sum):""}${l.status==="new"?`<button class="btn s" onclick="NC.markLead('${l.id}')">Mark as called</button>`:""}</div>`}).join(""):`<div class="card"><p class="mu">No requests yet. Switch to Patient, finish the assessment at Stage 0 and request a call.</p></div>`}`;
 };
 function markLead(id){DB.leads.find(l=>l.id===id).status="contacted";save();render()}
@@ -1401,8 +1458,11 @@ VIEWS["admin.funnel"]=()=>{
  <div class="card"><h3>Where people stop</h3>${reach.length?`<table><tr><th>Question</th><th>Reached it</th></tr>${Q.map((q,i)=>`<tr><td class="sm">${i+1}. ${E(q.q)}</td><td>${reach[i]||0}</td></tr>`).join("")}</table>`:`<p class="mu sm">Fills in as people use the assessment.</p>`}</div>`;
 };
 VIEWS["admin.verify"]=()=>{
- let h=`<h2>Verification queue</h2>${fold("ad_doc","Doctors",`<table><tr><th>Doctor</th><th>Registration no.</th><th>Status</th><th></th></tr>${DB.doctors.map(d=>`<tr><td>${E(d.name)}<br><span class="mu sm">${E(d.qual)}</span></td><td class="sm">${E(d.regno)}</td><td><span class="tag ${d.reg==="verified"?"g":"a"}">${d.reg}</span></td><td>${d.reg!=="verified"?`<button class="btn s" onclick="NC.verifyDoc('${d.id}')">Mark verified</button>`:""}</td></tr>`).join("")}</table>
- <p class="mu sm">In the real product: check the number against the state Ayurveda council register and the practitioner's telemedicine course certificate.</p>`,true)}`;
+ let h=`<h2>Verification queue</h2>${fold("ad_doc","Doctors",`${DB.doctors.map(d=>`<div style="border-top:1px solid var(--ln);padding:8px 0"><b>${E(d.name)}</b> <span class="tag ${d.reg==="verified"?"g":"a"}">${d.reg}</span><br><span class="mu sm">${E(d.qual)}</span>
+ <p class="sm">Registration no.: <b>${E(d.regno||"missing")}</b>${d.council?" · "+E(d.council):""}<br>Certificate image: ${certOk(d)?`uploaded ${fd(d.cert.at)}`:"not uploaded"}${d.rejectNote?`<br>Last rejection: ${E(d.rejectNote)}`:""}</p>
+ ${certOk(d)?`<details><summary class="sm">View certificate image</summary><img src="${d.cert.data}" alt="Registration certificate uploaded by ${E(d.name)}" style="max-width:100%;border:1px solid var(--ln);border-radius:8px;margin-top:6px"></details>`:""}
+ ${d.reg!=="verified"?(certOk(d)&&d.regno?`<div class="fl" style="margin-top:6px"><button class="btn s" onclick="NC.verifyDoc('${d.id}')">Approve registration</button><input id="rd_${d.id}" placeholder="Reason to reject" aria-label="Reason to reject ${E(d.name)}" style="flex:1;min-width:140px"><button class="btn g s" onclick="NC.rejectDoc('${d.id}')">Reject</button></div>`:`<span class="mu sm">Cannot approve until the doctor uploads the registration certificate image.</span>`):""}</div>`).join("")}
+ <p class="mu sm">Check that the name and registration number on the certificate image match what was entered, and look the number up on the state Ayurveda council's own register if it publishes one. This prototype does not do that lookup. Also check the practitioner's telemedicine course certificate in the real product.</p>`,true)}`;
  if(S.stage>=2){
   h+=fold("ad_sup","Suppliers",`${DB.suppliers.map(s=>{const miss=[!s.licence&&"licence",!s.gmp&&"GMP certificate",!s.report&&"batch test report"].filter(Boolean);
    return `<div style="border-top:1px solid var(--ln);padding:8px 0"><b>${E(s.name)}</b> <span class="tag ${s.status==="verified"?"g":"a"}">${s.status}</span><p class="sm">Licence: ${E(s.licence||"missing")}<br>GMP: ${E(s.gmp||"missing")}<br>Batch test report: ${s.report?"provided":"missing"}</p>
@@ -1415,7 +1475,34 @@ VIEWS["admin.verify"]=()=>{
  }
  return h;
 };
-function verifyDoc(id){const d=doc(id);if(!d||!d.regno){toast("Cannot verify: registration number missing");return}d.reg="verified";save();render()}
+const certOk=d=>!!(d&&d.cert&&typeof d.cert.data==="string"&&d.cert.data.indexOf("data:image/jpeg;base64,")===0);
+function verifyDoc(id){const d=doc(id);if(!d||!d.regno){toast("Cannot verify: registration number missing");return}if(!certOk(d)){toast("Cannot verify: registration certificate image not uploaded");return}d.reg="verified";d.rejectNote="";save();render()}
+function rejectDoc(id){const d=doc(id);if(!d)return;const r=val("rd_"+id);if(r.length<3){toast("Write a reason so the doctor knows what to fix");return}d.reg="rejected";d.rejectNote=r;save();toast("Registration rejected");render()}
+function certPick(inp){
+ const d=doc(S.doc),f=inp.files&&inp.files[0];if(!d||!f)return;
+ if(d.reg==="verified"){toast("Your registration is already verified");return}
+ if(!/^image\/(jpeg|png|webp)$/.test(f.type)){toast("Upload a photo or scan as JPG, PNG or WebP");inp.value="";return}
+ if(f.size>10*1048576){toast("Image is larger than 10 MB. Use a smaller photo.");inp.value="";return}
+ const fr=new FileReader();fr.onerror=()=>toast("Could not read that file");
+ fr.onload=()=>{const im=new Image();im.onerror=()=>toast("That file is not a readable image");
+  im.onload=()=>{let w=im.width,h=im.height;if(!w||!h){toast("That file is not a readable image");return}
+   const sc=Math.min(1,1200/Math.max(w,h));w=Math.round(w*sc);h=Math.round(h*sc);
+   const c=document.createElement("canvas");c.width=w;c.height=h;const x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,w,h);x.drawImage(im,0,0,w,h);
+   const data=c.toDataURL("image/jpeg",0.75);
+   d.cert={name:String(f.name).slice(0,80),data,at:new Date().toISOString()};d.reg="pending";d.rejectNote="";save();toast("Certificate uploaded. The admin will review it.");render()};
+  im.src=fr.result};
+ fr.readAsDataURL(f)
+}
+function regCard(){
+ const d=doc(S.doc);if(!d)return "";
+ const st=d.reg==="verified"?"g":"a";
+ return fold("dr_reg","My registration · "+d.reg,`<p class="sm">Registration no.: <b>${E(d.regno||"missing")}</b>${d.council?" · "+E(d.council):""}</p>
+ ${d.reg==="verified"?`<p class="good">Your registration is verified. Patients can book you.</p>`:`<p class="sm">Patients cannot book you until the admin verifies your registration. Upload a clear photo or scan of your state Ayurveda council registration certificate.</p>
+ ${d.reg==="rejected"?`<p class="warn sm">Rejected: ${E(d.rejectNote||"please upload again")}. Upload a new image to try again.</p>`:""}
+ ${certOk(d)?`<p class="sm">Uploaded ${fd(d.cert.at)} (${E(d.cert.name)}). ${d.reg==="pending"?"Waiting for the admin to review it.":""}</p>`:""}
+ <label class="sm">Certificate image (JPG, PNG or WebP)<br><input type="file" id="cert_f" accept="image/jpeg,image/png,image/webp" onchange="NC.certPick(this)"></label>
+ <p class="mu sm">The image is shrunk and kept in this browser only. Do not upload anything else.</p>`}
+ ${certOk(d)?`<details><summary class="sm">View the image you uploaded</summary><img src="${d.cert.data}" alt="Your uploaded registration certificate" style="max-width:100%;border:1px solid var(--ln);border-radius:8px;margin-top:6px"></details>`:""}`,d.reg!=="verified")}
 function approveSup(id){const s=sup(id);if(!s.licence||!s.gmp||!s.report){toast("Cannot approve: licence, GMP certificate and batch test report are all needed");return}s.status="verified";save();render()}
 function approveProd(id){const p=prod(id);
  if(!p||sup(p.sup).status!=="verified"){toast("Cannot approve: the supplier is not verified");return}
@@ -1465,7 +1552,7 @@ let maxReach=-1,startedThisRun0=false;
 const lastTxt=c=>c.status==="pending"?"not audited yet":fd(c.last);
 const tmpPw=()=>"Nc"+Math.random().toString(36).slice(2,8)+Math.floor(10+Math.random()*89);
 const val=id=>(($(id)||{}).value||"").trim();
-function mkLogin(role,ref,name,email){const pw=tmpPw();DB.users.push({id:uid(),role,ref,name,email,ph:hpw(email,pw),since:new Date().toISOString()});S.cred={role,name,email,pw}}
+function mkLogin(role,ref,name,email){const pw=tmpPw();DB.users.push({id:uid(),role,ref,name,email,ph:hpw(email,pw),tmp:true,since:new Date().toISOString()});S.cred={role,name,email,pw}}
 function obCheck(email,phone){
  if(!okEmail(email))return "Enter a valid contact email.";
  if(DB.users.some(u=>u.email===email))return "An account with this email already exists.";
@@ -1517,10 +1604,10 @@ VIEWS["admin.onboard"]=()=>{
  const f=(id,l,ph,t)=>`<label class="sm">${l}<br><input id="${id}" ${t?`type="${t}"`:""} placeholder="${E(ph||l)}"></label>`;
  const procs=Object.keys(PROC_INFO).map((t,i)=>`<div class="fl"><label class="ck" style="flex:1"><input type="checkbox" id="obt_${i}"><span>${E(t)}</span></label><input id="obp_${i}" type="number" min="1" max="100000" placeholder="Price ₹" aria-label="Price for ${E(t)}" style="width:96px"></div>`).join("");
  return `<h2>Onboarding</h2><p class="mu sm">Add a new doctor, supplier or clinic. Each gets a login and then goes through verification or audit before it can see patients, sell or take bookings. ${pendD} doctor${pendD===1?"":"s"}, ${pendS} supplier${pendS===1?"":"s"} and ${pendC} clinic${pendC===1?"":"s"} awaiting verification.</p>
- ${cr?`<div class="good" role="status"><b>Login created for ${E(cr.name)}.</b><br>Email: ${E(cr.email)}<br>Temporary password: <b>${E(cr.pw)}</b><br><span class="sm">Share this with them now. It is not shown again.</span><br><button class="btn g s" onclick="NC.dismissCred()">Done, hide it</button></div>`:""}
+ ${cr?`<div class="good" role="status"><b>${cr.reset?"Password reset for ":"Login created for "}${E(cr.name)}.</b><br>Email: ${E(cr.email)}<br>Temporary password: <b>${E(cr.pw)}</b><br><span class="sm">Share this with them now. It is not shown again.</span><br><button class="btn g s" onclick="NC.dismissCred()">Done, hide it</button></div>`:""}
  ${fold("ob_doc","Onboard a doctor",`<div class="grid" style="gap:8px">${f("ob_dn","Doctor full name")}${f("ob_dq","Qualification","BAMS, MD (Kayachikitsa)")}${f("ob_dx","Years of experience","","number")}${f("ob_dl","Languages","English, Hindi")}${f("ob_df","Consultation fee ₹","","number")}${f("ob_dr","State council registration number")}${f("ob_dc","State Ayurveda council")}${f("ob_de","Contact email","name@example.com","email")}${f("ob_dp","Contact phone","","tel")}</div>
   <label class="sm" style="display:block;margin-top:8px">Weekly slots, comma separated<br><input id="ob_ds" placeholder="Mon 10:00, Wed 17:00"></label>
-  <p class="mu sm">The doctor stays unverified, and patients cannot book them, until you mark the registration verified under Verification.</p>
+  <p class="mu sm">The doctor stays unverified, and patients cannot book them, until they upload a photo of their council registration certificate and you approve it under Verification.</p>
   <button class="btn" onclick="NC.onboardDoc()">Onboard doctor</button>`,true)}
  ${fold("ob_sup","Onboard a supplier",`<div class="grid" style="gap:8px">${f("ob_sn","Company name")}${f("ob_sc","Contact person")}${f("ob_se","Contact email","name@company.com","email")}${f("ob_sp","Contact phone","","tel")}${f("ob_ss","State")}${f("ob_sl","Drug manufacturing licence number")}${f("ob_sg","GMP certificate details (optional now)","Certificate and valid-to date")}</div>
   <label class="ck"><input type="checkbox" id="ob_sr"><span>Batch test report received (optional now)</span></label>
@@ -1530,13 +1617,13 @@ VIEWS["admin.onboard"]=()=>{
   <p class="sm" style="margin-top:8px"><b>Treatments offered and prices</b></p>${procs}
   <p class="mu sm">A new clinic cannot take bookings until you record an SOP audit scoring 80% or more under Verification.</p>
   <button class="btn" onclick="NC.onboardClinic()">Onboard clinic</button>`,false)}
- ${fold("ob_list","Onboarded logins ("+DB.users.filter(u=>u.role!=="patient"&&u.role!=="admin").length+")",`<table><tr><th>Name</th><th>Role</th><th>Email</th></tr>${DB.users.filter(u=>u.role!=="patient"&&u.role!=="admin").map(u=>`<tr><td class="sm">${E(u.name)}</td><td class="sm">${E(roleName(u.role))}</td><td class="sm">${E(u.email)}</td></tr>`).join("")}</table>`,false)}`;
+ ${fold("ob_list","Onboarded logins ("+DB.users.filter(u=>u.role!=="patient"&&u.role!=="admin").length+")",`<table><tr><th>Name</th><th>Role</th><th>Email</th><th></th></tr>${DB.users.filter(u=>u.role!=="patient"&&u.role!=="admin").map(u=>`<tr><td class="sm">${E(u.name)}</td><td class="sm">${E(roleName(u.role))}</td><td class="sm">${E(u.email)}</td><td><button class="btn g s" aria-label="Reset password for ${E(u.name)}" onclick="NC.adminReset('${u.id}')">Reset password</button></td></tr>`).join("")}</table><p class="mu sm">Reset gives the person a new temporary password. They are asked to change it when they log in.</p>`,false)}`;
 };
 function dismissCred(){S.cred=null;render()}
 VIEWS["admin.cat"]=()=>catView(DB,inr);
 const _done=window.onAssessmentDone;window.onAssessmentDone=s=>{_done(s);startedThisRun0=false;maxReach=-1;
  const m=DB.metrics;m.reach=m.reach||[];if(Q.length){m.reach[Q.length]=(m.reach[Q.length]||0)}save()};
-return {get DB(){return DB},authTab,doLogin,doRegister,demoMode,logout,onboardSup,onboardClinic,onboardDoc,dismissCred,foldSet,rejectProd,nextGo,render,setRole,setTab,setStage,goto,setCtx,reqLead,pickSlot,confirmBook,placeOrder,bookClinic,logFollow,setRemind,bookReview,openCase,closeCase,dr,drTest,drAddMed,drDelMed,pickAgree,drOtherTest,drAddTreat,drDelTreat,issueRx,markLead,pickPlan,submitSup,addProduct,setOrder,setBooking,saveAudit,verifyDoc,approveSup,approveProd,recordAudit,saveSettings,resetAll,sim};
+return {get DB(){return DB},authTab,sendReset,doReset,changePw,pwToggle,adminReset,certPick,rejectDoc,doLogin,doRegister,demoMode,logout,onboardSup,onboardClinic,onboardDoc,dismissCred,foldSet,rejectProd,nextGo,render,setRole,setTab,setStage,goto,setCtx,reqLead,pickSlot,confirmBook,placeOrder,bookClinic,logFollow,setRemind,bookReview,openCase,closeCase,dr,drTest,drAddMed,drDelMed,pickAgree,drOtherTest,drAddTreat,drDelTreat,issueRx,markLead,pickPlan,submitSup,addProduct,setOrder,setBooking,saveAudit,verifyDoc,approveSup,approveProd,recordAudit,saveSettings,resetAll,sim};
 })();
 
 NC.render();

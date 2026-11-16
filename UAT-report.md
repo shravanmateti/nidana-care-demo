@@ -123,3 +123,12 @@ Date: 15 Nov 2026. Four requests were built and tested: (1) the detailed analysi
 ## 9. Doctor onboarding
 
 Admin > Onboarding > doctor form: name, qualification (must include BAMS), experience, languages, fee (₹100 to ₹5000), state council registration number and council, contact, and weekly slots (for example "Mon 10:00, Wed 17:00"). The doctor starts as unverified with a login and a one-time temporary password. Patients cannot book an unverified doctor, and the admin cannot verify one without a registration number. Tested in t10 (validation, duplicates, pending state, login, booking refused until verified, booking works after verification) and in the end-to-end run.
+
+
+## 10. Round 3: password reset, change password, doctor certificate review
+
+Built: change password (current password required, strength check, must differ); forgot password with a one-use 6-digit code (shown on screen in the prototype, expires in 10 minutes, locked after 5 wrong tries, no hint whether the email exists); admin-issued temporary passwords that must be changed at first login; doctor upload of the council registration certificate as an image, admin review with Approve or Reject plus reason, re-upload after rejection. A doctor cannot be verified without a certificate image and a registration number.
+
+Tests: t11 (40 checks) passes, as do t2-t10 and t5.
+
+Limits: no email or SMS, so the reset code appears on the page (a real build must send it and hold it on a server). Passwords are still a demo-only hash in localStorage. The certificate image lives in the browser only, and the admin compares it by eye; there is no lookup against any state council register, no document authenticity or image-tampering check, and PDFs are not accepted.
