@@ -138,7 +138,7 @@ const {chromium}=require('playwright');
  const book=async()=>q2.evaluate(()=>{const D=NC.DB,d=D.doctors.at(-1),n=D.appts.length;NC.pickSlot(d.id,d.slots[0]);NC.confirmBook();return D.appts.length-n});
  await q2.evaluate(()=>{NC.DB.doctors.push({id:'dz',name:'Dr. Test Pending',qual:'BAMS',exp:1,langs:'English',fee:300,slots:['Mon 10:00'],reg:'pending',regno:'ZZ-12345'})});
  T('patient cannot book an unverified doctor',(await book())===0);
- await q2.evaluate(()=>{NC.verifyDoc('dz')});T('patient can book once the admin verifies the doctor',(await book())===1);
+ await q2.evaluate(()=>{NC.DB.doctors.find(d=>d.id==='dz').cert={name:'c.jpg',data:'data:image/jpeg;base64,AAAA',at:new Date().toISOString()};NC.verifyDoc('dz')});T('patient can book once the admin verifies the doctor',(await book())===1);
  // new doctor logs in
  await p.evaluate(()=>NC.logout());await login(p,'anita@doc.test',cr[1]);
  T('new doctor can log in with the temporary password',(await txt(p)).includes('Anita Joshi')&&(await txt(p)).includes('(Doctor)'));
