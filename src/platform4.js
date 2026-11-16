@@ -11,8 +11,11 @@ VIEWS["admin.funnel"]=()=>{
  <div class="card"><h3>Where people stop</h3>${reach.length?`<table><tr><th>Question</th><th>Reached it</th></tr>${Q.map((q,i)=>`<tr><td class="sm">${i+1}. ${E(q.q)}</td><td>${reach[i]||0}</td></tr>`).join("")}</table>`:`<p class="mu sm">Fills in as people use the assessment.</p>`}</div>`;
 };
 VIEWS["admin.verify"]=()=>{
- let h=`<h2>Verification queue</h2>${fold("ad_doc","Doctors",`<table><tr><th>Doctor</th><th>Registration no.</th><th>Status</th><th></th></tr>${DB.doctors.map(d=>`<tr><td>${E(d.name)}<br><span class="mu sm">${E(d.qual)}</span></td><td class="sm">${E(d.regno)}</td><td><span class="tag ${d.reg==="verified"?"g":"a"}">${d.reg}</span></td><td>${d.reg!=="verified"?`<button class="btn s" onclick="NC.verifyDoc('${d.id}')">Mark verified</button>`:""}</td></tr>`).join("")}</table>
- <p class="mu sm">In the real product: check the number against the state Ayurveda council register and the practitioner's telemedicine course certificate.</p>`,true)}`;
+ let h=`<h2>Verification queue</h2>${fold("ad_doc","Doctors",`${DB.doctors.map(d=>`<div style="border-top:1px solid var(--ln);padding:8px 0"><b>${E(d.name)}</b> <span class="tag ${d.reg==="verified"?"g":"a"}">${d.reg}</span><br><span class="mu sm">${E(d.qual)}</span>
+ <p class="sm">Registration no.: <b>${E(d.regno||"missing")}</b>${d.council?" · "+E(d.council):""}<br>Certificate image: ${certOk(d)?`uploaded ${fd(d.cert.at)}`:"not uploaded"}${d.rejectNote?`<br>Last rejection: ${E(d.rejectNote)}`:""}</p>
+ ${certOk(d)?`<details><summary class="sm">View certificate image</summary><img src="${d.cert.data}" alt="Registration certificate uploaded by ${E(d.name)}" style="max-width:100%;border:1px solid var(--ln);border-radius:8px;margin-top:6px"></details>`:""}
+ ${d.reg!=="verified"?(certOk(d)&&d.regno?`<div class="fl" style="margin-top:6px"><button class="btn s" onclick="NC.verifyDoc('${d.id}')">Approve registration</button><input id="rd_${d.id}" placeholder="Reason to reject" aria-label="Reason to reject ${E(d.name)}" style="flex:1;min-width:140px"><button class="btn g s" onclick="NC.rejectDoc('${d.id}')">Reject</button></div>`:`<span class="mu sm">Cannot approve until the doctor uploads the registration certificate image.</span>`):""}</div>`).join("")}
+ <p class="mu sm">Check that the name and registration number on the certificate image match what was entered, and look the number up on the state Ayurveda council's own register if it publishes one. This prototype does not do that lookup. Also check the practitioner's telemedicine course certificate in the real product.</p>`,true)}`;
  if(S.stage>=2){
   h+=fold("ad_sup","Suppliers",`${DB.suppliers.map(s=>{const miss=[!s.licence&&"licence",!s.gmp&&"GMP certificate",!s.report&&"batch test report"].filter(Boolean);
    return `<div style="border-top:1px solid var(--ln);padding:8px 0"><b>${E(s.name)}</b> <span class="tag ${s.status==="verified"?"g":"a"}">${s.status}</span><p class="sm">Licence: ${E(s.licence||"missing")}<br>GMP: ${E(s.gmp||"missing")}<br>Batch test report: ${s.report?"provided":"missing"}</p>
@@ -25,7 +28,34 @@ VIEWS["admin.verify"]=()=>{
  }
  return h;
 };
-function verifyDoc(id){const d=doc(id);if(!d||!d.regno){toast("Cannot verify: registration number missing");return}d.reg="verified";save();render()}
+const certOk=d=>!!(d&&d.cert&&typeof d.cert.data==="string"&&d.cert.data.indexOf("data:image/jpeg;base64,")===0);
+function verifyDoc(id){const d=doc(id);if(!d||!d.regno){toast("Cannot verify: registration number missing");return}if(!certOk(d)){toast("Cannot verify: registration certificate image not uploaded");return}d.reg="verified";d.rejectNote="";save();render()}
+function rejectDoc(id){const d=doc(id);if(!d)return;const r=val("rd_"+id);if(r.length<3){toast("Write a reason so the doctor knows what to fix");return}d.reg="rejected";d.rejectNote=r;save();toast("Registration rejected");render()}
+function certPick(inp){
+ const d=doc(S.doc),f=inp.files&&inp.files[0];if(!d||!f)return;
+ if(d.reg==="verified"){toast("Your registration is already verified");return}
+ if(!/^image\/(jpeg|png|webp)$/.test(f.type)){toast("Upload a photo or scan as JPG, PNG or WebP");inp.value="";return}
+ if(f.size>10*1048576){toast("Image is larger than 10 MB. Use a smaller photo.");inp.value="";return}
+ const fr=new FileReader();fr.onerror=()=>toast("Could not read that file");
+ fr.onload=()=>{const im=new Image();im.onerror=()=>toast("That file is not a readable image");
+  im.onload=()=>{let w=im.width,h=im.height;if(!w||!h){toast("That file is not a readable image");return}
+   const sc=Math.min(1,1200/Math.max(w,h));w=Math.round(w*sc);h=Math.round(h*sc);
+   const c=document.createElement("canvas");c.width=w;c.height=h;const x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,w,h);x.drawImage(im,0,0,w,h);
+   const data=c.toDataURL("image/jpeg",0.75);
+   d.cert={name:String(f.name).slice(0,80),data,at:new Date().toISOString()};d.reg="pending";d.rejectNote="";save();toast("Certificate uploaded. The admin will review it.");render()};
+  im.src=fr.result};
+ fr.readAsDataURL(f)
+}
+function regCard(){
+ const d=doc(S.doc);if(!d)return "";
+ const st=d.reg==="verified"?"g":"a";
+ return fold("dr_reg","My registration · "+d.reg,`<p class="sm">Registration no.: <b>${E(d.regno||"missing")}</b>${d.council?" · "+E(d.council):""}</p>
+ ${d.reg==="verified"?`<p class="good">Your registration is verified. Patients can book you.</p>`:`<p class="sm">Patients cannot book you until the admin verifies your registration. Upload a clear photo or scan of your state Ayurveda council registration certificate.</p>
+ ${d.reg==="rejected"?`<p class="warn sm">Rejected: ${E(d.rejectNote||"please upload again")}. Upload a new image to try again.</p>`:""}
+ ${certOk(d)?`<p class="sm">Uploaded ${fd(d.cert.at)} (${E(d.cert.name)}). ${d.reg==="pending"?"Waiting for the admin to review it.":""}</p>`:""}
+ <label class="sm">Certificate image (JPG, PNG or WebP)<br><input type="file" id="cert_f" accept="image/jpeg,image/png,image/webp" onchange="NC.certPick(this)"></label>
+ <p class="mu sm">The image is shrunk and kept in this browser only. Do not upload anything else.</p>`}
+ ${certOk(d)?`<details><summary class="sm">View the image you uploaded</summary><img src="${d.cert.data}" alt="Your uploaded registration certificate" style="max-width:100%;border:1px solid var(--ln);border-radius:8px;margin-top:6px"></details>`:""}`,d.reg!=="verified")}
 function approveSup(id){const s=sup(id);if(!s.licence||!s.gmp||!s.report){toast("Cannot approve: licence, GMP certificate and batch test report are all needed");return}s.status="verified";save();render()}
 function approveProd(id){const p=prod(id);
  if(!p||sup(p.sup).status!=="verified"){toast("Cannot approve: the supplier is not verified");return}
@@ -75,7 +105,7 @@ let maxReach=-1,startedThisRun0=false;
 const lastTxt=c=>c.status==="pending"?"not audited yet":fd(c.last);
 const tmpPw=()=>"Nc"+Math.random().toString(36).slice(2,8)+Math.floor(10+Math.random()*89);
 const val=id=>(($(id)||{}).value||"").trim();
-function mkLogin(role,ref,name,email){const pw=tmpPw();DB.users.push({id:uid(),role,ref,name,email,ph:hpw(email,pw),since:new Date().toISOString()});S.cred={role,name,email,pw}}
+function mkLogin(role,ref,name,email){const pw=tmpPw();DB.users.push({id:uid(),role,ref,name,email,ph:hpw(email,pw),tmp:true,since:new Date().toISOString()});S.cred={role,name,email,pw}}
 function obCheck(email,phone){
  if(!okEmail(email))return "Enter a valid contact email.";
  if(DB.users.some(u=>u.email===email))return "An account with this email already exists.";
@@ -127,10 +157,10 @@ VIEWS["admin.onboard"]=()=>{
  const f=(id,l,ph,t)=>`<label class="sm">${l}<br><input id="${id}" ${t?`type="${t}"`:""} placeholder="${E(ph||l)}"></label>`;
  const procs=Object.keys(PROC_INFO).map((t,i)=>`<div class="fl"><label class="ck" style="flex:1"><input type="checkbox" id="obt_${i}"><span>${E(t)}</span></label><input id="obp_${i}" type="number" min="1" max="100000" placeholder="Price ₹" aria-label="Price for ${E(t)}" style="width:96px"></div>`).join("");
  return `<h2>Onboarding</h2><p class="mu sm">Add a new doctor, supplier or clinic. Each gets a login and then goes through verification or audit before it can see patients, sell or take bookings. ${pendD} doctor${pendD===1?"":"s"}, ${pendS} supplier${pendS===1?"":"s"} and ${pendC} clinic${pendC===1?"":"s"} awaiting verification.</p>
- ${cr?`<div class="good" role="status"><b>Login created for ${E(cr.name)}.</b><br>Email: ${E(cr.email)}<br>Temporary password: <b>${E(cr.pw)}</b><br><span class="sm">Share this with them now. It is not shown again.</span><br><button class="btn g s" onclick="NC.dismissCred()">Done, hide it</button></div>`:""}
+ ${cr?`<div class="good" role="status"><b>${cr.reset?"Password reset for ":"Login created for "}${E(cr.name)}.</b><br>Email: ${E(cr.email)}<br>Temporary password: <b>${E(cr.pw)}</b><br><span class="sm">Share this with them now. It is not shown again.</span><br><button class="btn g s" onclick="NC.dismissCred()">Done, hide it</button></div>`:""}
  ${fold("ob_doc","Onboard a doctor",`<div class="grid" style="gap:8px">${f("ob_dn","Doctor full name")}${f("ob_dq","Qualification","BAMS, MD (Kayachikitsa)")}${f("ob_dx","Years of experience","","number")}${f("ob_dl","Languages","English, Hindi")}${f("ob_df","Consultation fee ₹","","number")}${f("ob_dr","State council registration number")}${f("ob_dc","State Ayurveda council")}${f("ob_de","Contact email","name@example.com","email")}${f("ob_dp","Contact phone","","tel")}</div>
   <label class="sm" style="display:block;margin-top:8px">Weekly slots, comma separated<br><input id="ob_ds" placeholder="Mon 10:00, Wed 17:00"></label>
-  <p class="mu sm">The doctor stays unverified, and patients cannot book them, until you mark the registration verified under Verification.</p>
+  <p class="mu sm">The doctor stays unverified, and patients cannot book them, until they upload a photo of their council registration certificate and you approve it under Verification.</p>
   <button class="btn" onclick="NC.onboardDoc()">Onboard doctor</button>`,true)}
  ${fold("ob_sup","Onboard a supplier",`<div class="grid" style="gap:8px">${f("ob_sn","Company name")}${f("ob_sc","Contact person")}${f("ob_se","Contact email","name@company.com","email")}${f("ob_sp","Contact phone","","tel")}${f("ob_ss","State")}${f("ob_sl","Drug manufacturing licence number")}${f("ob_sg","GMP certificate details (optional now)","Certificate and valid-to date")}</div>
   <label class="ck"><input type="checkbox" id="ob_sr"><span>Batch test report received (optional now)</span></label>
@@ -140,11 +170,11 @@ VIEWS["admin.onboard"]=()=>{
   <p class="sm" style="margin-top:8px"><b>Treatments offered and prices</b></p>${procs}
   <p class="mu sm">A new clinic cannot take bookings until you record an SOP audit scoring 80% or more under Verification.</p>
   <button class="btn" onclick="NC.onboardClinic()">Onboard clinic</button>`,false)}
- ${fold("ob_list","Onboarded logins ("+DB.users.filter(u=>u.role!=="patient"&&u.role!=="admin").length+")",`<table><tr><th>Name</th><th>Role</th><th>Email</th></tr>${DB.users.filter(u=>u.role!=="patient"&&u.role!=="admin").map(u=>`<tr><td class="sm">${E(u.name)}</td><td class="sm">${E(roleName(u.role))}</td><td class="sm">${E(u.email)}</td></tr>`).join("")}</table>`,false)}`;
+ ${fold("ob_list","Onboarded logins ("+DB.users.filter(u=>u.role!=="patient"&&u.role!=="admin").length+")",`<table><tr><th>Name</th><th>Role</th><th>Email</th><th></th></tr>${DB.users.filter(u=>u.role!=="patient"&&u.role!=="admin").map(u=>`<tr><td class="sm">${E(u.name)}</td><td class="sm">${E(roleName(u.role))}</td><td class="sm">${E(u.email)}</td><td><button class="btn g s" aria-label="Reset password for ${E(u.name)}" onclick="NC.adminReset('${u.id}')">Reset password</button></td></tr>`).join("")}</table><p class="mu sm">Reset gives the person a new temporary password. They are asked to change it when they log in.</p>`,false)}`;
 };
 function dismissCred(){S.cred=null;render()}
 VIEWS["admin.cat"]=()=>catView(DB,inr);
 const _done=window.onAssessmentDone;window.onAssessmentDone=s=>{_done(s);startedThisRun0=false;maxReach=-1;
  const m=DB.metrics;m.reach=m.reach||[];if(Q.length){m.reach[Q.length]=(m.reach[Q.length]||0)}save()};
-return {get DB(){return DB},authTab,doLogin,doRegister,demoMode,logout,onboardSup,onboardClinic,onboardDoc,dismissCred,foldSet,rejectProd,nextGo,render,setRole,setTab,setStage,goto,setCtx,reqLead,pickSlot,confirmBook,placeOrder,bookClinic,logFollow,setRemind,bookReview,openCase,closeCase,dr,drTest,drAddMed,drDelMed,pickAgree,drOtherTest,drAddTreat,drDelTreat,issueRx,markLead,pickPlan,submitSup,addProduct,setOrder,setBooking,saveAudit,verifyDoc,approveSup,approveProd,recordAudit,saveSettings,resetAll,sim};
+return {get DB(){return DB},authTab,sendReset,doReset,changePw,pwToggle,adminReset,certPick,rejectDoc,doLogin,doRegister,demoMode,logout,onboardSup,onboardClinic,onboardDoc,dismissCred,foldSet,rejectProd,nextGo,render,setRole,setTab,setStage,goto,setCtx,reqLead,pickSlot,confirmBook,placeOrder,bookClinic,logFollow,setRemind,bookReview,openCase,closeCase,dr,drTest,drAddMed,drDelMed,pickAgree,drOtherTest,drAddTreat,drDelTreat,issueRx,markLead,pickPlan,submitSup,addProduct,setOrder,setBooking,saveAudit,verifyDoc,approveSup,approveProd,recordAudit,saveSettings,resetAll,sim};
 })();

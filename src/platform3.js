@@ -2,7 +2,7 @@
 const patName=()=>E(DB.patient.name);
 VIEWS["doctor.inbox"]=()=>{
  const ls=DB.leads.filter(l=>l.doctor===S.doc).slice().reverse();
- return `<h2>Requests from patients</h2><p class="mu">Stage 0: patients who finished the assessment and asked for a call. Call them back and note how often the pattern is right.</p>
+ return `${regCard()}<h2>Requests from patients</h2><p class="mu">Stage 0: patients who finished the assessment and asked for a call. Call them back and note how often the pattern is right.</p>
  ${ls.length?ls.map(l=>{const a=aById(l.assess);return `<div class="card"><h3>${patName()} · ${fd(l.when)} <span class="tag ${l.status==="new"?"a":"g"}">${l.status}</span></h3><p class="sm">Phone: <b>${E(l.phone)}</b></p>${a?sumHtml(a.sum):""}${l.status==="new"?`<button class="btn s" onclick="NC.markLead('${l.id}')">Mark as called</button>`:""}</div>`}).join(""):`<div class="card"><p class="mu">No requests yet. Switch to Patient, finish the assessment at Stage 0 and request a call.</p></div>`}`;
 };
 function markLead(id){DB.leads.find(l=>l.id===id).status="contacted";save();render()}

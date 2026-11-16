@@ -100,9 +100,65 @@ function enterAs(U){S.role=U.role;S.tab=TABS[U.role][0][0];S.caseId=null;if(U.ro
 const okEmail=e=>/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e);
 const okPhone=p=>/^[0-9+\- ]{8,15}$/.test(p);
 const okPw=p=>p.length>=8&&/[A-Za-z]/.test(p)&&/[0-9]/.test(p);
-function authTab(t){S.auth.tab=t;S.auth.err="";render()}
+function authTab(t){S.auth.tab=t;S.auth.err="";S.auth.reset=null;render()}
 function authErr(m){S.auth.err=m;const e=$("authErr");if(e){e.textContent=m;e.hidden=!m}else render();const f=$("authErr");if(f)f.focus&&f.focus()}
+function resetHtml(){
+ const a=S.auth,r=a.reset;
+ return `<div class="top"><div class="brand"><b>Nidana Care</b><span class="badge">Prototype · sample data · no real payments · not for clinical use</span></div></div>
+ <div class="auth"><h1>Reset your password</h1><div class="card">
+ ${r&&r.sent?`<p class="sm">If an account exists for <b>${E(r.email)}</b>, a 6-digit code has been created.</p>
+ ${r.code?`<div class="good" role="status"><b>Prototype only:</b> no email is sent, so your code is shown here: <b>${E(r.code)}</b><br><span class="sm">It works once and expires in 10 minutes. A real app would email it.</span></div>`:""}
+ <label class="sm">Code<br><input id="rs_c" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code"></label>
+ <label class="sm">New password (8 or more characters, letters and a number)<br><input id="rs_w" type="password" autocomplete="new-password" placeholder="New password"></label>
+ <label class="sm">Confirm new password<br><input id="rs_w2" type="password" autocomplete="new-password" placeholder="Confirm new password"></label>
+ <p id="authErr" class="warn sm" role="alert" tabindex="-1" ${a.err?"":"hidden"}>${E(a.err)}</p>
+ <button class="btn" style="width:100%" onclick="NC.doReset()">Set new password</button>`
+ :`<p class="sm">Enter the email you log in with.</p>
+ <label class="sm">Email<br><input id="rs_e" type="email" autocomplete="email" placeholder="Email address"></label>
+ <p id="authErr" class="warn sm" role="alert" tabindex="-1" ${a.err?"":"hidden"}>${E(a.err)}</p>
+ <button class="btn" style="width:100%" onclick="NC.sendReset()">Send reset code</button>`}
+ <p class="mu sm" style="margin-top:10px">Doctors, suppliers and clinics can also ask the admin to issue a new temporary password.</p>
+ <button class="btn g s" onclick="NC.authTab('login')">Back to log in</button>${r&&r.sent?` <button class="btn g s" onclick="NC.authTab('reset')">Start again</button>`:""}</div></div>`}
+function sendReset(){
+ const e=($("rs_e").value||"").trim().toLowerCase();if(!okEmail(e)){authErr("Enter a valid email address.");return}
+ const U=DB.users.find(u=>u.email===e);
+ S.auth.reset={email:e,sent:true,code:U?String(100000+Math.floor(Math.random()*900000)):"",exp:Date.now()+600000,tries:0};S.auth.err="";render()
+}
+function doReset(){
+ const a=S.auth,r=a.reset;if(!r)return;
+ const c=($("rs_c").value||"").trim(),w=$("rs_w").value||"",w2=$("rs_w2").value||"";
+ if(Date.now()>r.exp||!r.code){authErr("This code has expired or is not valid. Go back and ask for a new one.");return}
+ if(r.tries>=5){r.code="";authErr("Too many wrong codes. Ask for a new code.");return}
+ if(c!==r.code){r.tries++;authErr("That code is not correct.");return}
+ if(!okPw(w)){authErr("Password needs 8 or more characters with letters and a number.");return}
+ if(w!==w2){authErr("The two passwords do not match.");return}
+ const U=DB.users.find(u=>u.email===r.email);if(!U){authErr("This code has expired or is not valid.");return}
+ U.ph=hpw(U.email,w);delete U.tmp;save();a.reset=null;a.tab="login";a.err="";a.fails=0;a.until=0;render();toast("Password changed. Log in with the new one.")
+}
+function pwCard(U){
+ return `<div class="card" id="pwCard"><h3>Change password</h3>${U.tmp?`<p class="warn sm">You are using a temporary password. Please choose your own now.</p>`:""}
+ <label class="sm">Current password<br><input id="cp_o" type="password" autocomplete="current-password" placeholder="Current password"></label>
+ <label class="sm">New password (8 or more characters, letters and a number)<br><input id="cp_n" type="password" autocomplete="new-password" placeholder="New password"></label>
+ <label class="sm">Confirm new password<br><input id="cp_n2" type="password" autocomplete="new-password" placeholder="Confirm new password"></label>
+ <p id="pwErr" class="warn sm" role="alert" ${S.pwErr?"":"hidden"}>${E(S.pwErr||"")}</p>
+ <div class="fl"><button class="btn s" onclick="NC.changePw()">Save new password</button><button class="btn g s" onclick="NC.pwToggle()">Cancel</button></div></div>`}
+function pwToggle(){S.pwOpen=!S.pwOpen;S.pwErr="";render()}
+function changePw(){
+ const U=realUser();if(!U)return;
+ const o=$("cp_o").value||"",n=$("cp_n").value||"",n2=$("cp_n2").value||"";
+ const bad=m=>{S.pwErr=m;const e=$("pwErr");e.textContent=m;e.hidden=false};
+ if(U.ph!==hpw(U.email,o)){bad("Current password is not correct.");return}
+ if(!okPw(n)){bad("New password needs 8 or more characters with letters and a number.");return}
+ if(n!==n2){bad("The two new passwords do not match.");return}
+ if(n===o){bad("Choose a password different from the current one.");return}
+ U.ph=hpw(U.email,n);delete U.tmp;S.pwOpen=false;S.pwErr="";save();render();toast("Password changed")
+}
+function adminReset(id){
+ const U=DB.users.find(u=>u.id===id);if(!U||U.role==="admin"||U.role==="patient")return;
+ const pw=tmpPw();U.ph=hpw(U.email,pw);U.tmp=true;save();S.cred={role:U.role,name:U.name,email:U.email,pw,reset:true};render()
+}
 function authHtml(){
+ if(S.auth.tab==="reset")return resetHtml();
  const a=S.auth,reg=a.tab==="register";
  const demoRows=DB.users.filter(u=>u.demo).map(u=>`<tr><td>${E(roleName(u.role))}</td><td class="sm">${E(u.name)}</td><td class="sm">${E(u.email)}</td></tr>`).join("");
  return `<div class="top"><div class="brand"><b>Nidana Care</b><span class="badge">Prototype · sample data · no real payments · not for clinical use</span></div></div>
@@ -118,6 +174,7 @@ function authHtml(){
  <label class="ck"><input type="checkbox" id="rg_c"><span>I understand this is a prototype. My account stays in this browser only, and I will not enter real health details or a password I use elsewhere.</span></label>`:""}
  <p id="authErr" class="warn sm" role="alert" tabindex="-1" ${a.err?"":"hidden"}>${E(a.err)}</p>
  <button class="btn" style="width:100%" onclick="NC.${reg?"doRegister":"doLogin"}()">${reg?"Create account":"Log in"}</button>
+ ${reg?"":`<p class="sm" style="margin-top:8px"><button class="btn g s" onclick="NC.authTab('reset')">Forgot password?</button></p>`}
  <p class="mu sm" style="margin-top:10px">Doctors, suppliers and clinics do not register here. The admin onboards them and gives each a login.</p></div>
  <div class="card"><h3>Just looking around?</h3><p class="mu sm">Demo mode uses sample data and lets you switch between all five roles.</p><button class="btn g" style="width:100%" onclick="NC.demoMode()">Explore the demo</button></div>
  <details class="card"><summary><h3 style="display:inline">Sample logins for the demo</h3></summary><p class="mu sm">Password for all sample accounts: <b>${DEMO_PW}</b>. These are made-up accounts for this prototype only.</p><table><tr><th>Role</th><th>Name</th><th>Email</th></tr>${demoRows}</table></details></div>`}
@@ -127,7 +184,7 @@ function doLogin(){
  if(!e||!w){authErr("Enter your email and password.");return}
  const U=DB.users.find(u=>u.email===e&&u.ph===hpw(e,w));
  if(!U){a.fails++;if(a.fails>=5){a.until=Date.now()+30000;a.fails=0}authErr("Email or password is not correct.");return}
- a.fails=0;a.err="";DB.session={uid:U.id};save();enterAs(U);render();scrollTo(0,0);toast("Welcome, "+U.name)
+ a.fails=0;a.err="";DB.session={uid:U.id};S.pwOpen=!!U.tmp;S.pwErr="";save();enterAs(U);render();scrollTo(0,0);toast(U.tmp?"Please set your own password":"Welcome, "+U.name)
 }
 function doRegister(){
  const n=($("rg_n").value||"").trim(),p=($("rg_p").value||"").trim(),e=($("rg_e").value||"").trim().toLowerCase(),w=$("rg_w").value||"",w2=$("rg_w2").value||"";
@@ -142,7 +199,7 @@ function doRegister(){
  DB.patient={name:n,phone:p};DB.session={uid:U.id};S.auth.err="";save();enterAs(U);render();scrollTo(0,0);toast("Account created")
 }
 function demoMode(){DB.session={demo:true};save();S.auth.err="";render()}
-function logout(){DB.session=null;S.auth={tab:"login",err:"",fails:0,until:0};S.cred=null;save();render();scrollTo(0,0)}
+function logout(){DB.session=null;S.auth={tab:"login",err:"",fails:0,until:0};S.cred=null;S.pwOpen=false;save();render();scrollTo(0,0)}
 function render(){
  const root=$("root");
  if(DB.session&&!DB.session.demo&&!realUser())DB.session=null;
@@ -151,11 +208,11 @@ function render(){
  if(U&&S.role!==U.role)enterAs(U);
  const tabs=TABS[S.role];
  root.innerHTML=`<div class="top"><div class="brand"><b>Nidana Care</b><span class="badge">Prototype · sample data · no real payments · not for clinical use</span></div>
- <div class="acct">${U?`<span>Signed in as <b>${E(U.name)}</b> (${E(roleName(U.role))})</span> <button class="btn g s" onclick="NC.logout()">Log out</button>`:`<span>Demo mode: you can switch between all roles.</span> <button class="btn g s" onclick="NC.logout()">Log in or register</button>`}</div>
+ <div class="acct">${U?`<span>Signed in as <b>${E(U.name)}</b> (${E(roleName(U.role))})</span> <span><button class="btn g s" onclick="NC.pwToggle()">Change password</button> <button class="btn g s" onclick="NC.logout()">Log out</button></span>`:`<span>Demo mode: you can switch between all roles.</span> <button class="btn g s" onclick="NC.logout()">Log in or register</button>`}</div>
  ${U?"":`<div class="pills" role="tablist">${ROLES.map(r=>`<button class="${r[0]===S.role?"on":""}" onclick="NC.setRole('${r[0]}')">${r[1]}</button>`).join("")}${ctxSel()}</div>`}
  ${U&&U.role!=="admin"?"":`<details class="stg"><summary>Demo setting: rollout stage ${S.stage} · ${E(STAGES[S.stage].t)}</summary><div class="stgb">${STAGES.map(s=>`<button class="${s.n===S.stage?"on":""}" title="${E(s.t)}" onclick="NC.setStage(${s.n})">${s.n}</button>`).join("")}<span class="sm">${E(STAGES[S.stage].d)}</span></div></details>`}
  <div class="pills" style="margin-top:8px">${tabs.map(t=>`<button class="${t[0]===S.tab?"on":""} ${t[2]>S.stage?"lk":""}" onclick="NC.setTab('${t[0]}')">${E(t[1])}${t[2]>S.stage?" (Stage "+t[2]+")":""}</button>`).join("")}</div></div>
- <div id="nxtSlot">${nextBar()}</div><div id="view" style="margin-top:14px"></div>`;
+ ${U&&S.pwOpen?pwCard(U):""}<div id="nxtSlot">${nextBar()}</div><div id="view" style="margin-top:14px"></div>`;
  const v=$("view");
  const min=minOf(S.role,S.tab);
  if(min>S.stage){v.innerHTML=lockCard(min);return}
