@@ -80,7 +80,7 @@ const {chromium}=require('playwright');
  // ---- 3. admin onboards a supplier
  p=await mk(false);await login(p,'admin@nidana.demo',PW);await p.evaluate(()=>NC.setTab('onboard'));
  await p.evaluate(()=>document.querySelectorAll('#view details').forEach(d=>d.open=true));
- const sup=async o=>{await setv(p,Object.assign({ob_sn:'Greenroot Pharma',ob_sc:'R. Iyer',ob_se:'iyer@greenroot.test',ob_sp:'9811122233',ob_ss:'Kerala',ob_sl:'LIC-KL-9001',ob_sg:'',ob_sr:false},o));const n=await p.evaluate(()=>NC.DB.suppliers.length);await p.evaluate(()=>NC.onboardSup());return p.evaluate(n=>NC.DB.suppliers.length-n,n)};
+ const sup=async o=>{await setv(p,Object.assign({ob_sn:'Greenroot Pharma',ob_sc:'R. Iyer',ob_se:'iyer@greenroot.test',ob_sp:'9811122233',ob_ss:'Kerala',ob_sz:'682030',ob_sl:'LIC-KL-9001',ob_sg:'',ob_sr:false},o));const n=await p.evaluate(()=>NC.DB.suppliers.length);await p.evaluate(()=>NC.onboardSup());return p.evaluate(n=>NC.DB.suppliers.length-n,n)};
  T('supplier needs a valid email',(await sup({ob_se:'bad'}))===0);
  T('supplier needs a valid phone',(await sup({ob_sp:'1'}))===0);
  T('supplier needs a licence number',(await sup({ob_sl:'ab'}))===0);

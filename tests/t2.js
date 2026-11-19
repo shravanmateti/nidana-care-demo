@@ -49,6 +49,7 @@ const {chromium}=require('playwright');
  await p.click('button:has-text("Patient")');
  await p.click('button:has-text("Medicines")');
  t=await txt();ok('meds page shows rx',t.includes('GMP verified')&&t.includes('Place order'));
+ await p.fill('#np','682002');await p.click('text=Show delivery');
  await p.click('text=Place order (mock payment)');
  t=await txt();ok('order placed',t.includes('placed'));
  // supplier dispatch

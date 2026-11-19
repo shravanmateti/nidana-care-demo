@@ -33,6 +33,7 @@ const {chromium}=require('playwright');
  T('patient next: order meds',(await txt()).includes('order your medicines'));
  await shot('22_care');
  await p.click('.nxt button');await shot('23_meds');
+ await p.fill('#np','682002');await p.click('text=Show delivery');
  await p.click('button:has-text("Place order")');
  T('patient next: clinic',(await txt()).includes('pick a clinic and a date'));
  await p.click('.nxt button');
