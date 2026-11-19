@@ -86,6 +86,8 @@ const PROC_INFO={
  "Raktamokshana (leech therapy)":{ail:["psoriasis","eczema","scalppso"],ref:[CR.psoF],sh:1,note:"CCRAS: leech therapy is indicated in certain patients."}
 };
 const PROCS=Object.keys(PROC_INFO);
+const SUP_LOC={s1:{pin:"682001",lat:9.98,lng:76.28,dispatch:1,ship:60,restock:7},s2:{pin:"500001",lat:17.39,lng:78.47,dispatch:1,ship:50,restock:7}};
+function CAT_STOCK(){const st={};CAT_PRODUCTS().forEach((p,i)=>{if(p.status!=="approved")return;const o=p.sup==="s1"?"s2":"s1";st[p.id]={[p.sup]:[30,5,40,12][i%4]};if(i%3===0)st[p.id][o]=[3,8,15,4][i%4]});return st}
 const CAT_LOC={c1:{pin:"682001",lat:9.98,lng:76.28},c2:{pin:"500001",lat:17.39,lng:78.47},c3:{pin:"600001",lat:13.09,lng:80.28}};
 function CAT_CLINICS(addDays){
  const all=(m,x)=>Object.assign({},m,x);

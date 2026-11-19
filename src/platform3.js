@@ -94,7 +94,8 @@ VIEWS["supplier.products"]=()=>{
  <label class="ck"><input type="checkbox" id="sr" ${s.report?"checked":""}><span>I have batch test reports (COA) for the products I list</span></label>
  <button class="btn s" onclick="NC.submitSup()">Submit for verification</button></div>`}
  ${fold("sup_products","Your products ("+ps.length+")",`<table><tr><th>Product</th><th>Batch</th><th>Price</th><th>Status</th></tr>${ps.map(p=>`<tr><td>${E(p.name)}<br><span class="mu sm">${E(p.form)}</span></td><td>${E(p.batch||"-")}</td><td>${inr(p.price)}</td><td><span class="tag ${p.status==="approved"?"g":p.status==="rejected"?"w":"a"}">${p.status}</span>${p.status==="rejected"&&p.reason?`<br><span class="mu sm">${E(p.reason)}</span>`:""}</td></tr>`).join("")||"<tr><td colspan=4>None</td></tr>"}</table>`,ps.length<=3)}
- <div class="card"><h3>Add a product</h3><div class="fl"><input id="an" placeholder="Product name"><input id="af" placeholder="Form and pack, e.g. Oil, 200 ml"><input id="ap" type="number" placeholder="Price" style="width:100px"><input id="ab" placeholder="Batch no."></div>
+ ${s.status==="verified"?stockFold(s):""}
+ <div class="card"><h3>Add a product</h3><div class="fl"><input id="an" placeholder="Product name"><input id="af" placeholder="Form and pack, e.g. Oil, 200 ml"><input id="ap" type="number" placeholder="Price" style="width:100px"><input id="ab" placeholder="Batch no."><input id="aq" type="number" min="0" placeholder="Units in stock" aria-label="Units in stock" style="width:120px"></div>
  <label class="ck"><input type="checkbox" id="ac"><span>Batch test report attached for this batch</span></label><label class="ck"><input type="checkbox" id="ahm"><span>Contains minerals, metals or Rasa ingredients (bhasma, lauha, rasa, gandhaka)</span></label><label class="ck"><input type="checkbox" id="aht"><span>Heavy-metal assay (lead, mercury, arsenic) report available for this batch</span></label>
  <p class="mu sm">For mineral or Rasa products, give the assay details. Admin checks them before approval.</p>
  <div class="fl"><input id="aal" placeholder="Assay lab name" aria-label="Assay lab name"><input id="aan" placeholder="Assay report no." aria-label="Assay report number"><label class="sm">Test date <input id="aad" type="date" max="${isoDay(new Date())}"></label></div><button class="btn s" onclick="NC.addProduct()">Submit for approval</button></div>`;
@@ -111,13 +112,50 @@ function addProduct(){
   if(dt>isoDay(new Date())){toast("The assay date cannot be in the future");return}
   assay={lab,no,date:dt};
  }
- DB.products.push({id:uid(),sup:S.sup,name:n,form:f,price:p,batch:b,status:"pending",ail:[],ref:[],hm,ht:hm&&!!assay,assay,note:""});save();toast("Submitted for approval");render();
+ const q=Math.max(0,parseInt(($("aq")||{}).value,10)||0),pid=uid();
+ DB.products.push({id:pid,sup:S.sup,name:n,form:f,price:p,batch:b,status:"pending",ail:[],ref:[],hm,ht:hm&&!!assay,assay,note:""});DB.stock[pid]={[S.sup]:q};save();toast("Submitted for approval");render();
 }
 VIEWS["supplier.orders"]=()=>{
  const os=DB.orders.filter(o=>o.sup===S.sup).slice().reverse();
- return `<h2>Orders</h2>${os.length?os.map(o=>`<div class="card"><h3>Order ${o.id} · ${fd(o.when)} <span class="tag a">${o.status}</span></h3><ul class="sm">${o.items.map(i=>`<li>${E(prod(i.pid).name)} × ${i.qty}</li>`).join("")}</ul><p><b>${inr(o.total)}</b> <span class="mu sm">Placed against a prescription</span></p>
+ return `<h2>Orders</h2>${os.length?os.map(o=>`<div class="card"><h3>Order ${o.id} · ${fd(o.when)} <span class="tag a">${o.status}</span></h3><ul class="sm">${o.items.map(i=>`<li>${E(prod(i.pid).name)} × ${i.qty}</li>`).join("")}</ul><p><b>${inr(o.total)}</b>${o.ship?` + shipping ${inr(o.ship)}`:""} <span class="mu sm">Placed against a prescription${o.n>1?" · parcel "+o.i+" of "+o.n:""}</span></p>
+ <p class="sm">Ship to: ${E(DB.patient.name||"Patient")}, PIN ${E(DB.patient.pin||"not given")}${o.eta?`<br>Customer was told: arrives by <b>${fd(o.eta)}</b> (${o.lo} to ${o.hi} days). Dispatch within ${Math.max(1,parseInt(sup(o.sup).dispatch,10)||1)} day(s).`:""}</p>
  <div class="fl">${o.status==="placed"?`<button class="btn s" onclick="NC.setOrder('${o.id}','dispatched')">Mark dispatched</button>`:""}${o.status==="dispatched"?`<button class="btn s" onclick="NC.setOrder('${o.id}','delivered')">Mark delivered</button>`:""}</div></div>`).join(""):`<div class="card"><p class="mu">No orders yet.</p></div>`}`;
 };
+function stockFold(s){
+ const has=p=>((DB.stock||{})[p.id]||{})[s.id]!==undefined;
+ const mine=DB.products.filter(p=>p.status==="approved"&&(p.sup===s.id||has(p)));
+ const others=DB.products.filter(p=>p.status==="approved"&&p.sup!==s.id&&!has(p));
+ return fold("sup_stock","Stock and dispatch",`<p class="mu sm">Patients' orders are sent to the verified suppliers who can deliver soonest, using the stock you enter here. Keep it up to date: when a product runs out, the patient is told it is back-ordered.</p>
+ <table><tr><th>Product</th><th>Units in stock</th></tr>${mine.map(p=>`<tr><td class="sm">${E(p.name)}<br><span class="mu">${E(p.form)}${p.sup!==s.id?" · listed by "+E(sup(p.sup).name.split(" (")[0]):""}</span></td><td><input id="st_${p.id}" type="number" min="0" value="${stockOf(p.id,s.id)}" aria-label="Units in stock for ${E(p.name)}" style="width:90px"></td></tr>`).join("")||"<tr><td colspan=2>No approved products yet.</td></tr>"}</table>
+ <button class="btn s" onclick="NC.saveStock()">Save stock</button>
+ ${others.length?`<p class="sm" style="margin-top:10px"><b>Also stock a product another supplier lists?</b> Same product, same price, same batch rules. Exact products only.</p><div class="fl"><select id="dv_p" aria-label="Product to stock">${others.map(p=>`<option value="${p.id}">${E(p.name)}</option>`).join("")}</select><input id="dv_q" type="number" min="1" placeholder="Units" aria-label="Units to stock" style="width:90px"><button class="btn s" onclick="NC.addDistrib()">Add</button></div>`:""}
+ <p class="sm" style="margin-top:12px"><b>Dispatch and delivery</b></p>
+ <div class="grid" style="gap:8px"><label class="sm">Your PIN code<br><input id="sp_pin" inputmode="numeric" maxlength="6" value="${E(s.pin||"")}"></label><label class="sm">Dispatch within (days, 1 to 7)<br><input id="sp_d" type="number" min="1" max="7" value="${s.dispatch||1}"></label><label class="sm">Shipping fee per parcel (₹)<br><input id="sp_f" type="number" min="0" max="5000" value="${s.ship||0}"></label><label class="sm">Restock time (days)<br><input id="sp_r" type="number" min="1" max="60" value="${s.restock||7}"></label></div>
+ <button class="btn s" onclick="NC.saveShip()">Save dispatch settings</button>`,false)
+}
+function saveStock(){
+ const s=sup(S.sup);let bad=false;const upd={};
+ DB.products.forEach(p=>{const e=$("st_"+p.id);if(!e)return;const v=e.value.trim();const n=Number(v);if(v===""||!Number.isInteger(n)||n<0||n>100000)bad=true;else upd[p.id]=n});
+ if(bad){toast("Stock must be a whole number from 0 to 100000");return}
+ Object.keys(upd).forEach(id=>{(DB.stock[id]=DB.stock[id]||{})[s.id]=upd[id]});
+ const sent=fillBackorders();save();toast(sent?"Stock saved. "+sent+" waiting parcel"+(sent>1?"s":"")+" now routed":"Stock saved");render()
+}
+function addDistrib(){
+ const s=sup(S.sup),p=prod(($("dv_p")||{}).value),q=parseInt(($("dv_q")||{}).value,10);
+ if(s.status!=="verified"){toast("Only verified suppliers can stock products");return}
+ if(!p||p.status!=="approved"){toast("Choose an approved product");return}
+ if(!(q>0&&q<=100000)){toast("Enter how many units you hold");return}
+ (DB.stock[p.id]=DB.stock[p.id]||{})[s.id]=q;const sent=fillBackorders();save();toast("Added to your stock");render()
+}
+function saveShip(){
+ const s=sup(S.sup),pin=val("sp_pin"),d=parseInt(val("sp_d"),10),f=Number(val("sp_f")),r=parseInt(val("sp_r"),10);
+ if(!PIN_RE.test(pin)){toast("Enter your 6-digit PIN code");return}
+ if(!(d>=1&&d<=7)){toast("Dispatch time must be 1 to 7 days");return}
+ if(!(f>=0&&f<=5000)){toast("Shipping fee must be between 0 and 5000");return}
+ if(!(r>=1&&r<=60)){toast("Restock time must be 1 to 60 days");return}
+ if(pin!==s.pin){s.pin=pin;delete s.lat;delete s.lng;geoPin(pin).then(g=>{if(g){save();render()}})}
+ s.dispatch=d;s.ship=f;s.restock=r;save();toast("Dispatch settings saved");render()
+}
 function setOrder(id,st){DB.orders.find(o=>o.id===id).status=st;save();render()}
 /* ---------- CLINIC ---------- */
 VIEWS["clinic.bookings"]=()=>{

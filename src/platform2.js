@@ -43,24 +43,98 @@ VIEWS["patient.care"]=()=>{
   :`<p class="mu sm">Waiting for the consultation. Your doctor will add a prescription after the call.</p>`}<div class="fl" style="margin-top:6px">${billBtn("a",ap.id)}</div></div>`}).join(""):`<div class="card"><p>No appointments yet.</p></div>`}
  <div class="card"><h3>Records</h3><p class="mu sm">Your assessments, kept so every doctor sees the history.</p><ul class="sm">${hist||"<li>None yet</li>"}</ul></div>`;
 };
+/* ---------- medicines: automatic supplier choice, split parcels, delivery estimate ---------- */
+const stockOf=(pid,sid)=>(((DB.stock||{})[pid]||{})[sid])|0;
+const aggr=meds=>{const m={};meds.forEach(x=>{m[x.pid]=(m[x.pid]||0)+x.qty});return Object.keys(m).map(pid=>({pid,qty:m[pid]}))};
+const transitDays=km=>km<50?0:km<300?1:km<800?2:km<1500?3:4;
+const prefixDays=(a,b)=>{a=String(a||"");b=String(b||"");return !a||!b?3:a.slice(0,3)===b.slice(0,3)?0:a.slice(0,2)===b.slice(0,2)?1:a[0]===b[0]?2:3};
+const supLoc=x=>isFinite(x.lat)?{lat:x.lat,lng:x.lng}:(x.pin&&DB.geo&&DB.geo[x.pin]&&isFinite(DB.geo[x.pin].lat)?DB.geo[x.pin]:null);
+function etaFor(x){
+ const P=DB.patient||{},l=supLoc(x),me=P.loc,km=me&&l?kmBetween(me,l):null;
+ const lo=Math.max(1,parseInt(x.dispatch,10)||1)+(km!=null?transitDays(km):prefixDays(P.pin,x.pin));
+ return {lo,hi:lo+1,km}
+}
+const cmpKey=(a,b)=>{for(let i=0;i<a.length;i++)if(a[i]!==b[i])return a[i]-b[i];return 0};
+/* Exact search: try every set of verified suppliers (at most 12, fastest first) that can cover the order.
+   Pick the set whose slowest parcel arrives soonest, then fewest parcels, then lowest shipping. Exact products only. */
+function planFor(lines){
+ const sups=DB.suppliers.filter(x=>x.status==="verified"),info={};
+ sups.forEach(x=>{info[x.id]=Object.assign({fee:Math.max(0,+x.ship||0)},etaFor(x))});
+ const want=[],back=[];
+ lines.forEach(l=>{const tot=sups.reduce((t,x)=>t+stockOf(l.pid,x.id),0),have=Math.min(l.qty,tot);if(have>0)want.push({pid:l.pid,qty:have});if(l.qty>have){const pr=prod(l.pid),ps=pr&&sup(pr.sup);back.push({pid:l.pid,qty:l.qty-have,days:(ps&&parseInt(ps.restock,10))||7})}});
+ const fast=(a,b)=>info[a.id].lo-info[b.id].lo||(a.id<b.id?-1:1);
+ const cand=sups.filter(x=>want.some(w=>stockOf(w.pid,x.id)>0)).sort(fast).slice(0,12);
+ let best=null;
+ if(want.length)for(let m=1;m<(1<<cand.length);m++){
+  const set=cand.filter((_,k)=>m>>k&1);
+  if(!want.every(w=>set.reduce((t,x)=>t+stockOf(w.pid,x.id),0)>=w.qty))continue;
+  const asg={};
+  want.forEach(w=>{
+   const one=set.find(x=>stockOf(w.pid,x.id)>=w.qty);
+   if(one){(asg[one.id]=asg[one.id]||[]).push({pid:w.pid,qty:w.qty});return}
+   let left=w.qty;set.forEach(x=>{const q=Math.min(left,stockOf(w.pid,x.id));if(q>0){(asg[x.id]=asg[x.id]||[]).push({pid:w.pid,qty:q});left-=q}})});
+  const used=Object.keys(asg),key=[Math.max.apply(null,used.map(id=>info[id].lo)),used.length,used.reduce((t,id)=>t+info[id].fee,0)];
+  if(!best||cmpKey(key,best.key)<0)best={key,asg}
+ }
+ const parcels=best?Object.keys(best.asg).map(id=>{const e=info[id];return {sup:id,items:best.asg[id],lo:e.lo,hi:e.hi,fee:e.fee,subtotal:best.asg[id].reduce((t,it)=>t+prod(it.pid).price*it.qty,0)}}).sort((a,b)=>a.lo-b.lo||(a.sup<b.sup?-1:1)):[];
+ const items=parcels.reduce((t,pc)=>t+pc.subtotal,0),ship=parcels.reduce((t,pc)=>t+pc.fee,0);
+ return {parcels,back,items,ship,grand:items+ship}
+}
+const etaTxt=(lo,hi,when)=>`in ${lo} to ${hi} days (by ${fd(addDays(when||new Date(),hi))}), estimated`;
+function makeOrders(rid,plan,late){
+ const grp=uid(),n=plan.parcels.length,now=new Date().toISOString();
+ plan.parcels.forEach((pc,k)=>{
+  pc.items.forEach(it=>{DB.stock[it.pid][pc.sup]-=it.qty});
+  DB.orders.push({id:uid(),rx:rid,grp,i:k+1,n,sup:pc.sup,items:pc.items,total:pc.subtotal,ship:pc.fee,lo:pc.lo,hi:pc.hi,eta:addDays(new Date(),pc.hi),late:!!late,status:"placed",when:now})})
+}
+/* when a supplier adds stock, waiting back-orders ship automatically */
+function fillBackorders(){
+ let n=0;
+ DB.backorders.filter(b=>b.status==="waiting").forEach(b=>{
+  const plan=planFor(b.items);if(!plan.parcels.length)return;
+  makeOrders(b.rx,plan,true);n+=plan.parcels.length;
+  b.items=plan.back.map(x=>({pid:x.pid,qty:x.qty}));if(!b.items.length)b.status="filled"});
+ return n
+}
+function pinAsk(){return `<div class="note sm"><b>Where should we send it?</b> Enter your PIN code. We pick the suppliers that can deliver soonest and show you the dates.<div class="fl" style="margin-top:6px"><input id="np" inputmode="numeric" maxlength="6" placeholder="Your PIN code" aria-label="Your PIN code" style="width:140px"><button class="btn s" onclick="NC.setPin()">Show delivery</button></div></div>`}
+function shipHtml(r){
+ const plan=planFor(aggr(r.meds));
+ const lines=pc=>pc.items.map(it=>E(prod(it.pid).name)+" × "+it.qty).join(", ");
+ return {plan,html:`<div class="note sm"><b>How it will ship</b>${plan.parcels.length>1?` <span class="tag a">${plan.parcels.length} parcels</span>`:""}
+ <ul>${plan.parcels.map((pc,k)=>`<li>${plan.parcels.length>1?"Parcel "+(k+1)+" of "+plan.parcels.length+": ":""}${lines(pc)}<br><span class="mu">From ${E(sup(pc.sup).name.split(" (")[0])} · arrives ${etaTxt(pc.lo,pc.hi)} · shipping ${pc.fee?inr(pc.fee):"free"}</span></li>`).join("")||"<li>None of these medicines is in stock right now.</li>"}</ul>
+ ${plan.back.length?`<p class="warn sm"><b>Not in stock right now:</b> ${plan.back.map(b=>E(prod(b.pid).name)+" × "+b.qty).join(", ")}. Restock is expected in about ${Math.max.apply(null,plan.back.map(b=>b.days))} days. It ships on its own as soon as it arrives, with no extra step from you, and you pay for it now.</p>`:""}
+ <p style="margin:6px 0 0">Medicines ${inr(plan.items)} · Shipping ${plan.ship?inr(plan.ship):"free"} · <b>Total ${inr(plan.grand)}</b></p></div>`}
+}
 VIEWS["patient.meds"]=()=>{
- const rxs=DB.rx.filter(r=>r.meds.length).reverse();
+ const rxs=DB.rx.filter(r=>r.meds.length).reverse(),P=DB.patient||{};
  const cat=DB.products.filter(p=>p.status==="approved"&&sup(p.sup).status==="verified");
+ const ordered=r=>DB.orders.some(o=>o.rx===r.id)||DB.backorders.some(b=>b.rx===r.id);
+ const need=rxs.some(r=>!ordered(r))&&!(P.pin||P.loc);
+ setTimeout(nearEnsure,0);
  return `<h2>Medicines</h2><div class="note"><b>Prescription needed</b>Medicines are sold only against a prescription from a registered doctor. The catalogue below is view-only until your doctor prescribes.</div>
- ${rxs.map(r=>{const done=DB.orders.filter(o=>o.rx===r.id);
+ ${need?pinAsk():""}
+ ${rxs.map(r=>{const done=DB.orders.filter(o=>o.rx===r.id),bo=DB.backorders.filter(b=>b.rx===r.id&&b.status==="waiting");
+  const sh=!ordered(r)&&(P.pin||P.loc)?shipHtml(r):null;
   return `<div class="card"><h3>From ${E(doc(r.doctor).name)} · ${fd(r.when)}</h3><table><tr><th>Product</th><th>Doctor's dose</th><th>Qty</th><th>Price</th></tr>${r.meds.map(m=>{const p=prod(m.pid);return `<tr><td>${E(p.name)}<br><span class="tag g">GMP verified</span> <span class="mu sm">${E(sup(p.sup).name)} · batch ${E(p.batch)}</span></td><td>${E(m.dose)}</td><td>${m.qty}</td><td>${inr(p.price*m.qty)}</td></tr>`}).join("")}</table>
-  <p><b>Total ${inr(rxTotal(r))}</b></p>
-  ${done.length?done.map(o=>`<span class="tag a">${E(sup(o.sup).name.split(" (")[0])}: ${E(o.status)}</span> ${billBtn("o",o.id)}`).join(" "):`<button class="btn s" onclick="NC.placeOrder('${r.id}')">Place order (mock payment)</button>`}</div>`}).join("")||`<div class="card"><p class="mu">No prescription yet. Book a doctor first.</p></div>`}
+  <p><b>Medicines ${inr(rxTotal(r))}</b></p>
+  ${sh?sh.html:""}
+  ${done.length?done.map(o=>`<div class="fl" style="border-top:1px solid var(--ln);padding:8px 0"><span class="sm" style="flex:1"><b>${o.n>1?"Parcel "+o.i+" of "+o.n:"Your parcel"}</b> from ${E(sup(o.sup).name.split(" (")[0])} <span class="tag ${o.status==="delivered"?"g":"a"}">${E(o.status)}</span><br>${o.items.map(i=>E(prod(i.pid).name)+" × "+i.qty).join(", ")}<br><span class="mu">${o.status==="delivered"?"Delivered":(o.eta?"Expected by "+fd(o.eta)+" (estimated, "+o.lo+" to "+o.hi+" days after "+(o.late?"restock":"ordering")+")":"")}${o.ship?" · shipping "+inr(o.ship):""}</span></span>${billBtn("o",o.id)}</div>`).join(""):""}
+  ${bo.map(b=>`<p class="warn sm"><b>Waiting for stock:</b> ${b.items.map(i=>E(prod(i.pid).name)+" × "+i.qty).join(", ")}. We will ship it automatically when it is back in stock.</p>`).join("")}
+  ${!ordered(r)?`<button class="btn s" ${sh&&sh.plan.parcels.length+sh.plan.back.length?"":"disabled"} onclick="NC.placeOrder('${r.id}')">Place order (mock payment)${sh?" · "+inr(sh.plan.grand):""}</button>`:""}</div>`}).join("")||`<div class="card"><p class="mu">No prescription yet. Book a doctor first.</p></div>`}
  <details class="card"><summary><b>Verified catalogue (view only)</b></summary><p class="mu sm">Every product here comes from a supplier whose licence, GMP certificate and batch test report were checked by admin.</p>
  <table><tr><th>Product</th><th>Supplier</th><th>Price</th></tr>${cat.map(p=>`<tr><td>${E(p.name)}<br><span class="mu sm">${E(p.form)}</span></td><td class="sm">${E(sup(p.sup).name)}</td><td>${inr(p.price)}</td></tr>`).join("")}</table></details>`;
 };
 function placeOrder(rid){
- const r=DB.rx.find(x=>x.id===rid),by={};
+ const r=DB.rx.find(x=>x.id===rid),P=DB.patient||{};
+ if(!r)return;
  const bad=r.meds.find(m=>{const p=prod(m.pid);return !p||p.status!=="approved"||sup(p.sup).status!=="verified"||(p.hm&&!p.ht)});
  if(bad){toast("A product on this prescription is not approved, so the order cannot be placed");return}
- r.meds.forEach(m=>{const p=prod(m.pid);(by[p.sup]=by[p.sup]||[]).push(m)});
- Object.keys(by).forEach(s=>{const items=by[s].map(m=>({pid:m.pid,qty:m.qty}));DB.orders.push({id:uid(),rx:rid,sup:s,items,total:items.reduce((t,i)=>t+prod(i.pid).price*i.qty,0),status:"placed",when:new Date().toISOString()})});
- save();toast("Order placed (mock)");render();scrollTo(0,0);
+ if(DB.orders.some(o=>o.rx===rid)||DB.backorders.some(b=>b.rx===rid)){toast("This prescription has already been ordered");return}
+ if(!(P.pin||P.loc)){toast("Add your PIN code first so we can work out delivery");return}
+ const plan=planFor(aggr(r.meds));
+ makeOrders(rid,plan,false);
+ if(plan.back.length)DB.backorders.push({id:uid(),rx:rid,items:plan.back.map(x=>({pid:x.pid,qty:x.qty})),when:new Date().toISOString(),status:"waiting"});
+ save();toast(plan.parcels.length?(plan.parcels.length>1?"Order placed in "+plan.parcels.length+" parcels (mock)":"Order placed (mock)"):"Order recorded. It ships when back in stock");render();scrollTo(0,0);
 }
 VIEWS["patient.clinic"]=()=>{
  const rxs=DB.rx.filter(r=>r.treat.length).reverse(),r=rxs[0],done=r&&DB.tbook.find(b=>b.rx===r.id),P=DB.patient;
@@ -119,9 +193,9 @@ async function nearEnsure(){
  if(nearBusy)return;nearBusy=true;let ch=false;S.geoFail=S.geoFail||{};
  try{const P=DB.patient;
   if(P.pin&&!P.loc&&!S.geoFail[P.pin]){const g=await geoPin(P.pin);if(g){P.loc={lat:g.lat,lng:g.lng,src:"pin"};ch=true}else{S.geoFail[P.pin]=1;ch=true}}
-  for(const c of DB.clinics){if(!clinicLoc(c)&&c.pin&&!S.geoFail[c.pin]){const g=await geoPin(c.pin);if(g)ch=true;else S.geoFail[c.pin]=1}}
+  for(const c of DB.clinics.concat(DB.suppliers.filter(x=>x.status==="verified"))){if(!clinicLoc(c)&&c.pin&&!S.geoFail[c.pin]){const g=await geoPin(c.pin);if(g)ch=true;else S.geoFail[c.pin]=1}}
  }finally{nearBusy=false}
- if(ch){save();if(S.role==="patient"&&S.tab==="clinic")render()}
+ if(ch){save();if(S.role==="patient"&&(S.tab==="clinic"||S.tab==="meds"))render()}
 }
 function setPin(){const v=val("np");if(!PIN_RE.test(v)){toast("Enter a 6-digit PIN code");return}const P=DB.patient;P.pin=v;P.loc=null;if(S.geoFail)delete S.geoFail[v];save();render()}
 function useLoc(){
@@ -139,8 +213,8 @@ function billFor(k,id){
  if(k==="a"){const x=DB.appts.find(y=>y.id===id);if(!x)return null;const d=doc(x.doctor)||{};
   return Object.assign(b,{no:billNo(k,x),title:x.review?"Follow-up consultation":"Online consultation",date:x.when,provider:d.name||"Doctor",provReg:d.regno?"Council registration no. "+d.regno:"",extra:"Appointment slot: "+x.slot,lines:[{d:(x.review?"Follow-up consultation":"Online consultation")+", "+x.slot,q:1,u:x.fee,a:x.fee}],total:x.fee,pay:"Paid online (mock payment, no real money was taken)"})}
  if(k==="o"){const x=DB.orders.find(y=>y.id===id);if(!x)return null;const s=sup(x.sup)||{};
-  const lines=x.items.map(i=>{const p=prod(i.pid)||{};return {d:(p.name||"Item")+(p.batch?" (batch "+p.batch+")":""),q:i.qty,u:p.price||0,a:(p.price||0)*i.qty}});
-  return Object.assign(b,{no:billNo(k,x),title:"Medicines order",date:x.when,provider:s.name||"Supplier",provReg:s.licence?"Drug licence no. "+s.licence:"",extra:"Order status: "+x.status,lines,total:lines.reduce((t,l)=>t+l.a,0),pay:"Paid online (mock payment, no real money was taken)"})}
+  const lines=x.items.map(i=>{const p=prod(i.pid)||{};return {d:(p.name||"Item")+(p.batch?" (batch "+p.batch+")":""),q:i.qty,u:p.price||0,a:(p.price||0)*i.qty}});if(x.ship)lines.push({d:"Shipping"+(x.n>1?" (parcel "+x.i+" of "+x.n+")":""),q:1,u:x.ship,a:x.ship});
+  return Object.assign(b,{no:billNo(k,x),title:"Medicines order",date:x.when,provider:s.name||"Supplier",provReg:s.licence?"Drug licence no. "+s.licence:"",extra:(x.n>1?"Parcel "+x.i+" of "+x.n+". ":"")+"Order status: "+x.status+(x.eta?". Estimated arrival "+fd(x.eta):""),lines,total:lines.reduce((t,l)=>t+l.a,0),pay:"Paid online (mock payment, no real money was taken)"})}
  if(k==="t"){const x=DB.tbook.find(y=>y.id===id);if(!x)return null;const c=cli(x.clinic)||{};
   const lines=x.items.map(i=>({d:i.name+", "+i.sessions+(i.sessions>1?" sessions":" session"),q:i.sessions,u:i.price,a:i.price*i.sessions}));
   return Object.assign(b,{no:billNo(k,x),title:"Clinic treatment",date:x.when,provider:c.name||"Clinic",provReg:c.regno?"Clinic registration no. "+c.regno:"",extra:"Treatment start date: "+x.date,lines,total:lines.reduce((t,l)=>t+l.a,0),pay:"To be paid at the clinic. Nothing has been paid yet."})}

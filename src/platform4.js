@@ -113,15 +113,16 @@ function obCheck(email,phone){
  return "";
 }
 function onboardSup(){
- const n=val("ob_sn"),c=val("ob_sc"),e=val("ob_se").toLowerCase(),ph=val("ob_sp"),st=val("ob_ss"),l=val("ob_sl"),g=val("ob_sg"),r=!!($("ob_sr")||{}).checked;
+ const n=val("ob_sn"),c=val("ob_sc"),pin=val("ob_sz"),e=val("ob_se").toLowerCase(),ph=val("ob_sp"),st=val("ob_ss"),l=val("ob_sl"),g=val("ob_sg"),r=!!($("ob_sr")||{}).checked;
  if(n.length<3){toast("Enter the supplier's company name");return}
  if(c.length<2){toast("Enter the contact person's name");return}
  const er=obCheck(e,ph);if(er){toast(er);return}
+ if(!/^[1-9]\d{5}$/.test(pin)){toast("Enter the supplier's 6-digit dispatch PIN code");return}
  if(l.length<5){toast("Enter the drug manufacturing licence number");return}
  if(DB.suppliers.some(x=>x.licence&&x.licence.toLowerCase()===l.toLowerCase())){toast("A supplier with this licence number is already on file");return}
  if(DB.suppliers.some(x=>x.name.toLowerCase()===n.toLowerCase())){toast("A supplier with this name is already on file");return}
- const id="s"+uid();DB.suppliers.push({id,name:n,licence:l,gmp:g,report:r,status:"pending",contact:c,email:e,phone:ph,state:st,since:new Date().toISOString()});
- mkLogin("supplier",id,n,e);save();toast("Supplier onboarded. Verification is pending.");S.fold.ad_sup=true;render()
+ const id="s"+uid();DB.suppliers.push({id,name:n,pin,dispatch:1,ship:0,restock:7,licence:l,gmp:g,report:r,status:"pending",contact:c,email:e,phone:ph,state:st,since:new Date().toISOString()});
+ mkLogin("supplier",id,n,e);geoPin(pin).then(g=>{if(g)save()});save();toast("Supplier onboarded. Verification is pending.");S.fold.ad_sup=true;render()
 }
 function onboardDoc(){
  const n=val("ob_dn"),q=val("ob_dq"),ex=parseInt(val("ob_dx"),10),lg=val("ob_dl"),fee=parseInt(val("ob_df"),10),rn=val("ob_dr"),cn=val("ob_dc"),e=val("ob_de").toLowerCase(),ph=val("ob_dp");
@@ -163,7 +164,7 @@ VIEWS["admin.onboard"]=()=>{
   <label class="sm" style="display:block;margin-top:8px">Weekly slots, comma separated<br><input id="ob_ds" placeholder="Mon 10:00, Wed 17:00"></label>
   <p class="mu sm">The doctor stays unverified, and patients cannot book them, until they upload a photo of their council registration certificate and you approve it under Verification.</p>
   <button class="btn" onclick="NC.onboardDoc()">Onboard doctor</button>`,true)}
- ${fold("ob_sup","Onboard a supplier",`<div class="grid" style="gap:8px">${f("ob_sn","Company name")}${f("ob_sc","Contact person")}${f("ob_se","Contact email","name@company.com","email")}${f("ob_sp","Contact phone","","tel")}${f("ob_ss","State")}${f("ob_sl","Drug manufacturing licence number")}${f("ob_sg","GMP certificate details (optional now)","Certificate and valid-to date")}</div>
+ ${fold("ob_sup","Onboard a supplier",`<div class="grid" style="gap:8px">${f("ob_sn","Company name")}${f("ob_sc","Contact person")}${f("ob_se","Contact email","name@company.com","email")}${f("ob_sp","Contact phone","","tel")}${f("ob_ss","State")}${f("ob_sz","Dispatch PIN code","6 digits")}${f("ob_sl","Drug manufacturing licence number")}${f("ob_sg","GMP certificate details (optional now)","Certificate and valid-to date")}</div>
   <label class="ck"><input type="checkbox" id="ob_sr"><span>Batch test report received (optional now)</span></label>
   <p class="mu sm">The licence number is required. Missing documents keep the supplier in the verification queue until they are provided.</p>
   <button class="btn" onclick="NC.onboardSup()">Onboard supplier</button>`,true)}
@@ -177,5 +178,5 @@ function dismissCred(){S.cred=null;render()}
 VIEWS["admin.cat"]=()=>catView(DB,inr);
 const _done=window.onAssessmentDone;window.onAssessmentDone=s=>{_done(s);startedThisRun0=false;maxReach=-1;
  const m=DB.metrics;m.reach=m.reach||[];if(Q.length){m.reach[Q.length]=(m.reach[Q.length]||0)}save()};
-return {get DB(){return DB},dlBill,setPin,useLoc,forgetLoc,authTab,sendReset,doReset,changePw,pwToggle,adminReset,certPick,rejectDoc,doLogin,doRegister,demoMode,logout,onboardSup,onboardClinic,onboardDoc,dismissCred,foldSet,rejectProd,nextGo,render,setRole,setTab,setStage,goto,setCtx,reqLead,pickSlot,confirmBook,placeOrder,bookClinic,logFollow,setRemind,bookReview,openCase,closeCase,dr,drTest,drAddMed,drDelMed,pickAgree,drOtherTest,drAddTreat,drDelTreat,issueRx,markLead,pickPlan,submitSup,addProduct,setOrder,setBooking,saveAudit,verifyDoc,approveSup,approveProd,recordAudit,saveSettings,resetAll,sim};
+return {get DB(){return DB},saveStock,addDistrib,saveShip,dlBill,setPin,useLoc,forgetLoc,authTab,sendReset,doReset,changePw,pwToggle,adminReset,certPick,rejectDoc,doLogin,doRegister,demoMode,logout,onboardSup,onboardClinic,onboardDoc,dismissCred,foldSet,rejectProd,nextGo,render,setRole,setTab,setStage,goto,setCtx,reqLead,pickSlot,confirmBook,placeOrder,bookClinic,logFollow,setRemind,bookReview,openCase,closeCase,dr,drTest,drAddMed,drDelMed,pickAgree,drOtherTest,drAddTreat,drDelTreat,issueRx,markLead,pickPlan,submitSup,addProduct,setOrder,setBooking,saveAudit,verifyDoc,approveSup,approveProd,recordAudit,saveSettings,resetAll,sim};
 })();

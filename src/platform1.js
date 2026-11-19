@@ -51,7 +51,13 @@ function seed(){
  };
 }
 let DB;
-function load(){try{const s=localStorage.getItem(LS);if(s){const d=JSON.parse(s);if(!d.users)d.users=seedUsers();if(d.session===undefined)d.session=null;(d.clinics||[]).forEach(c=>{const l=CAT_LOC[c.id];if(l&&!c.pin)Object.assign(c,l)});return d}}catch(e){}return seed()}
+function load(){try{const s=localStorage.getItem(LS);if(s){const d=JSON.parse(s);if(!d.users)d.users=seedUsers();if(d.session===undefined)d.session=null;return fixDB(d)}}catch(e){}return fixDB(seed())}
+function fixDB(d){
+ (d.clinics||[]).forEach(c=>{const l=CAT_LOC[c.id];if(l&&!c.pin)Object.assign(c,l)});
+ (d.suppliers||[]).forEach(x=>{const l=SUP_LOC[x.id];if(l&&!x.pin)Object.assign(x,l)});
+ if(!d.stock)d.stock=CAT_STOCK();
+ if(!d.backorders)d.backorders=[];
+ return d}
 function save(){try{localStorage.setItem(LS,JSON.stringify(DB))}catch(e){}}
 DB=load();
 try{if(/[?&]demo=1/.test(location.search)&&!DB.session)DB.session={demo:true}}catch(e){}
@@ -83,7 +89,7 @@ function nextStep(){
  if(ap.status!=="done"){
   if(S.role==="doctor"&&S.caseId)return null;
   return S.role==="doctor"?go("A patient has booked you. Open the case sheet to review and prescribe.","Open case sheet","doctor","appts",ap.id):go("Booked. The doctor sees you next. For this demo, continue as the doctor.","Continue as doctor","doctor","appts",ap.id)}
- if(rx.meds.length&&st>=2&&!DB.orders.some(o=>o.rx===rx.id))return S.role==="patient"&&S.tab==="meds"?null:go("Prescription issued. Now order your medicines.","Order medicines","patient","meds");
+ if(rx.meds.length&&st>=2&&!DB.orders.some(o=>o.rx===rx.id)&&!DB.backorders.some(b=>b.rx===rx.id))return S.role==="patient"&&S.tab==="meds"?null:go("Prescription issued. Now order your medicines.","Order medicines","patient","meds");
  if(rx.treat.length&&st>=3&&!DB.tbook.some(b=>b.rx===rx.id))return S.role==="patient"&&S.tab==="clinic"?null:go("Your doctor advised a clinic treatment. Now pick a clinic and a date.","Book clinic treatment","patient","clinic");
  const tb=DB.tbook.find(b=>b.rx===rx.id&&b.status==="booked");
  if(tb)return S.role==="clinic"&&S.tab==="bookings"?null:go("Treatment booked. For this demo, continue as the clinic to mark sessions done.","Continue as clinic","clinic","bookings");
