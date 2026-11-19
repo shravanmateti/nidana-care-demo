@@ -33,7 +33,7 @@ const {chromium}=require('playwright');
  T('patient next: order meds',(await txt()).includes('order your medicines'));
  await shot('22_care');
  await p.click('.nxt button');await shot('23_meds');
- await p.fill('#np','682002');await p.click('text=Show delivery');
+ await p.evaluate(()=>{const v={ad_n:'Asha Rao',ad_p:'9847012345',ad_l:'12 Temple Road',ad_a:'Near the bus stand',ad_c:'Kochi',ad_s:'Kerala',ad_z:'682002'};for(const k in v)document.getElementById(k).value=v[k]});await p.click('text=Save address');
  await p.click('button:has-text("Place order")');
  T('patient next: clinic',(await txt()).includes('pick a clinic and a date'));
  await p.click('.nxt button');

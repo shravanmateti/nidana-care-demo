@@ -1,7 +1,7 @@
 // Runs the suites in order. A suite fails if it exits non-zero or prints a line starting with FAIL
 // (t2, t3, t4 and t8 only print, they do not set an exit code).
 const {spawnSync}=require('child_process');
-const list=process.argv.slice(2).length?process.argv.slice(2):['t2','t3','t4','t6','t7','t8','t9','t10','t11','t12','t13'];
+const list=process.argv.slice(2).length?process.argv.slice(2):['t2','t3','t4','t6','t7','t8','t9','t10','t11','t12','t13','t14'];
 let failed=[];
 for(const t of list){
  console.log('== '+t);

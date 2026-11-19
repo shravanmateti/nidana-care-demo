@@ -49,14 +49,14 @@ const {chromium}=require('playwright');
  await p.click('button:has-text("Patient")');
  await p.click('button:has-text("Medicines")');
  t=await txt();ok('meds page shows rx',t.includes('GMP verified')&&t.includes('Place order'));
- await p.fill('#np','682002');await p.click('text=Show delivery');
+ await p.evaluate(()=>{const v={ad_n:'Asha Rao',ad_p:'9847012345',ad_l:'12 Temple Road',ad_a:'Near the bus stand',ad_c:'Kochi',ad_s:'Kerala',ad_z:'682002'};for(const k in v)document.getElementById(k).value=v[k]});await p.click('text=Save address');
  await p.click('text=Place order (mock payment)');
  t=await txt();ok('order placed',t.includes('placed'));
  // supplier dispatch
  await p.click('button:has-text("Supplier")');
  await p.click('button:has-text("Orders")');
  t=await txt();ok('supplier sees order',t.includes('Mark dispatched'));
- await p.click('text=Mark dispatched');await p.click('text=Mark delivered');
+ await p.fill('input[id^="cr_"]','BlueDart');await p.fill('input[id^="tn_"]','BD123456');await p.click('text=Mark dispatched');await p.click('text=Mark delivered');
  // Clinic booking by patient
  await p.click('button:has-text("Patient")');
  await p.click('button:has-text("Clinic treatment")');

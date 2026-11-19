@@ -19,7 +19,7 @@ const fs=require('fs');
  const openAll=p=>p.evaluate(()=>document.querySelectorAll('#view details').forEach(d=>d.open=true));
  // put the patient in Kochi, set stock, create one prescription with the given lines, open the Medicines page
  const setup=async(p,{pin='682002',stock={},meds=[{pid:'p1',qty:2},{pid:'p3',qty:1}],extra}={})=>{
-  await p.evaluate(([pin,stock,meds])=>{const D=NC.DB;D.patient.pin=pin;D.patient.loc=null;D.stock=stock;D.orders=[];D.backorders=[];D.rx=[];
+  await p.evaluate(([pin,stock,meds])=>{const D=NC.DB;D.patient.pin=pin;D.patient.loc=null;D.patient.addr=pin?{name:'Asha Rao',phone:'9847012345',line:'12 Temple Road',area:'',city:'Kochi',state:'Kerala',pin}:null;D.stock=stock;D.orders=[];D.backorders=[];D.rx=[];
    D.suppliers.forEach(s=>{if(s.id==='s1'){s.ship=60;s.dispatch=1}if(s.id==='s2'){s.ship=50;s.dispatch=1}});
    D.rx.push({id:'rx1',appt:'',doctor:'d1',when:new Date().toISOString(),meds:meds.map(m=>({pid:m.pid,qty:m.qty,dose:'as directed'})),tests:[],treat:[],advice:'',follow:new Date().toISOString()});
    NC.goto('patient','meds')},[pin,stock,meds]);
@@ -32,12 +32,12 @@ const fs=require('fs');
  let p=await mk();
  // 1. no PIN: asks once, cannot order
  await setup(p,{pin:'',stock:{p1:{s1:30},p3:{s2:40}}});
- T('no PIN: page asks where to send it, one field',(await txt(p)).includes('Where should we send it?'));
- T('no PIN: order button is disabled',await p.evaluate(()=>[...document.querySelectorAll('button')].filter(x=>/Place order/.test(x.textContent)).every(x=>x.disabled)));
- T('no PIN: placeOrder refuses',await p.evaluate(()=>{NC.placeOrder('rx1');return NC.DB.orders.length===0&&document.getElementById('toast').textContent.includes('PIN')}));
- // entering the PIN in the page shows the plan
- await p.fill('#np','682002');await p.click('text=Show delivery');await p.waitForFunction(()=>NC.DB.patient.loc,null,{timeout:6000});
- T('after the PIN the shipping plan appears',(await shipTxt(p)).includes('How it will ship'));
+ T('no address: page asks where to deliver',(await txt(p)).includes('Where should we deliver?'));
+ T('no address: order button is disabled',await p.evaluate(()=>[...document.querySelectorAll('button')].filter(x=>/Place order/.test(x.textContent)).every(x=>x.disabled)));
+ T('no address: placeOrder refuses',await p.evaluate(()=>{NC.placeOrder('rx1');return NC.DB.orders.length===0&&document.getElementById('toast').textContent.includes('address')}));
+ // saving the address in the page shows the plan
+ await p.evaluate(()=>{const v={ad_n:'Asha Rao',ad_p:'9847012345',ad_l:'12 Temple Road',ad_a:'',ad_c:'Kochi',ad_s:'Kerala',ad_z:'682002'};for(const k in v)document.getElementById(k).value=v[k]});await p.click('text=Save address');await p.waitForFunction(()=>NC.DB.patient.loc,null,{timeout:6000});
+ T('after the address the shipping plan appears',(await shipTxt(p)).includes('How it will ship'));
 
  // 2. one supplier can do everything: one parcel, from the nearest, soonest
  await setup(p,{stock:{p1:{s1:30},p3:{s1:5,s2:40}}});
@@ -122,7 +122,7 @@ const fs=require('fs');
  // 12. supplier view: ship-to, promised date; dispatch settings change the estimate
  await p.evaluate(()=>{NC.setRole('supplier');NC.goto('supplier','orders')});
  t=await txt(p);
- T('supplier sees ship-to PIN, promised date and dispatch window',/Ship to:/.test(t)&&/PIN 682002/.test(t)&&/arrives by/.test(t)&&/Dispatch within 1 day/.test(t),t.slice(0,400));
+ T('supplier sees ship-to PIN, promised date and dispatch window',/Ship to:/.test(t)&&/682002/.test(t)&&/arrives by/.test(t)&&/Dispatch within 1 day/.test(t),t.slice(0,400));
  await p.evaluate(()=>{NC.goto('supplier','products')});await openAll(p);
  const sv=async o=>{await setv(p,Object.assign({sp_pin:'682001',sp_d:'1',sp_f:'60',sp_r:'7'},o));return p.evaluate(()=>{const s=NC.DB.suppliers.find(x=>x.id==='s1'),b=[s.pin,s.dispatch,s.ship,s.restock].join();NC.saveShip();return b!==[s.pin,s.dispatch,s.ship,s.restock].join()})};
  T('bad PIN refused',!(await sv({sp_pin:'12'})));
@@ -172,7 +172,7 @@ const fs=require('fs');
  const sup=async o=>{await setv(p,Object.assign({ob_sn:'Pune Herbals',ob_sc:'A. Kulkarni',ob_se:'pune@herb.test',ob_sp:'9811100022',ob_ss:'Maharashtra',ob_sz:'560001',ob_sl:'LIC-MH-7001'},o));const n=await p.evaluate(()=>NC.DB.suppliers.length);await p.evaluate(()=>NC.onboardSup());return p.evaluate(n=>NC.DB.suppliers.length-n,n)};
  T('supplier onboarding needs a 6-digit PIN',(await sup({ob_sz:''}))===0&&(await sup({ob_sz:'5600'}))===0);
  T('supplier with a PIN is onboarded and located',(await sup({}))===1&&await p.waitForFunction(()=>NC.DB.geo&&NC.DB.geo['560001'],null,{timeout:5000}).then(()=>true).catch(()=>false));
- T('an unverified supplier is never used for routing',await p.evaluate(()=>{const D=NC.DB,s=D.suppliers.at(-1);D.stock={p3:{[s.id]:50}};D.patient.pin='560002';D.patient.loc=null;D.rx=[{id:'rx9',appt:'',doctor:'d1',when:new Date().toISOString(),meds:[{pid:'p3',qty:1,dose:'x'}],tests:[],treat:[],advice:'',follow:new Date().toISOString()}];D.orders=[];D.backorders=[];NC.placeOrder('rx9');return D.orders.length===0&&D.backorders.length===1}));
+ T('an unverified supplier is never used for routing',await p.evaluate(()=>{const D=NC.DB,s=D.suppliers.at(-1);D.stock={p3:{[s.id]:50}};D.patient.pin='560002';D.patient.loc=null;D.patient.addr={name:'A B',phone:'9847012345',line:'1 Main Road',area:'',city:'Bengaluru',state:'Karnataka',pin:'560002'};D.rx=[{id:'rx9',appt:'',doctor:'d1',when:new Date().toISOString(),meds:[{pid:'p3',qty:1,dose:'x'}],tests:[],treat:[],advice:'',follow:new Date().toISOString()}];D.orders=[];D.backorders=[];NC.placeOrder('rx9');return D.orders.length===0&&D.backorders.length===1}));
  await p.ctx.close();
 
  // ---------- phone width with two parcels
