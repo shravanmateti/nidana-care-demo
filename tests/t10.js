@@ -100,7 +100,7 @@ const {chromium}=require('playwright');
  // ---- 4. admin onboards a clinic
  await p.evaluate(()=>NC.logout());await login(p,'admin@nidana.demo',PW);await p.evaluate(()=>NC.setTab('onboard'));
  await p.evaluate(()=>document.querySelectorAll('#view details').forEach(d=>d.open=true));
- const cli=async(o,tr=true)=>{await setv(p,Object.assign({ob_cn:'Nirmal Ayurveda Clinic',ob_cc:'Pune',ob_cs:'Maharashtra',ob_cr:'MH-CLN-5521',ob_cd:'Dr. S. Kulkarni',ob_cp:'MH-BAMS-8812',ob_ce:'nirmal@clinic.test',ob_cph:'9822233344',ob_ca:'MG Road'},o));
+ const cli=async(o,tr=true)=>{await setv(p,Object.assign({ob_cn:'Nirmal Ayurveda Clinic',ob_cc:'Pune',ob_cz:'411001',ob_cs:'Maharashtra',ob_cr:'MH-CLN-5521',ob_cd:'Dr. S. Kulkarni',ob_cp:'MH-BAMS-8812',ob_ce:'nirmal@clinic.test',ob_cph:'9822233344',ob_ca:'MG Road'},o));
   await p.evaluate(tr=>{document.querySelectorAll('[id^=obt_]').forEach(e=>e.checked=false);if(tr){const a=document.getElementById('obt_0'),b=document.getElementById('obt_1');a.checked=true;b.checked=true;document.getElementById('obp_0').value='900';document.getElementById('obp_1').value='1500'}},tr);
   const n=await p.evaluate(()=>NC.DB.clinics.length);await p.evaluate(()=>NC.onboardClinic());return p.evaluate(n=>NC.DB.clinics.length-n,n)};
  T('clinic needs at least one treatment',(await cli({},false))===0);
