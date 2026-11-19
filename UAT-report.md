@@ -150,3 +150,12 @@ Built: orders are routed to the verified suppliers that hold the stock and can d
 Tests: t13 (50 checks) covers one parcel from the nearest supplier, forced splits, fewest parcels at equal speed, speed over parcel count, cheapest shipping at a tie, quantity split across suppliers, shortage and automatic back-order shipping, nothing in stock, no overselling across two prescriptions, bill shipping line, supplier validation (stock, PIN, dispatch, fee, restock), geocoder-down fallback, old saved data upgrade, unverified suppliers never used, and phone-width layout. t2 to t12 and t5 still pass.
 
 Limits: delivery times are tiered estimates, not courier promises; the supplier chooses dispatch days, so the estimate is only as honest as that setting; there is no full delivery address (PIN only), no courier tracking, no returns, no per-supplier price (a product has one price); stock is counted by hand by the supplier; the optimiser is exact but small (12 suppliers); Kochi and Hyderabad sample suppliers only.
+
+
+## 13. Round 6: delivery address and order tracking
+
+Built: a one-time delivery address form on the Medicines page (prefilled, validated, editable), a copy of the address on every parcel, and tracking: the supplier enters courier and tracking number when dispatching, the patient sees an Ordered / Dispatched / Delivered timeline with dates, the courier details and a late flag, plus a Track your order shortcut on My care. The supplier sees the address and mobile for their own parcel only; bills carry the delivery address.
+
+Tests: t14 (47 checks) covers each address field's validation, prefill, snapshot independence from later edits, supplier visibility limits, dispatch rules, timeline and aria-current, late and delivered flags, address change affecting the estimate, back-order parcels getting the address, HTML escaping in address and tracking text, old orders without the new fields, bill content, phone widths. t2 to t13 and t5 still pass.
+
+Limits: tracking is manual (no courier API, no live status, no link); no proof of delivery, patient receipt confirmation, cancellation, returns or complaint flow; one saved address per browser; no address book for several patients; supplier phone-number exposure to the shipping supplier is by design and needs the data-protection review.
