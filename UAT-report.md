@@ -141,3 +141,12 @@ Built: a PDF receipt for each consultation, medicine order and clinic booking, o
 Tests: t12 (40 checks) covers PDF validity (offsets, stream lengths, page count, multi-page), bill contents, PIN and device-location ranking, the offline fallback, refused location permission, registration and onboarding PINs, and phone-width layout. t2-t11 and t5 still pass.
 
 Limits: receipts are not tax invoices (no GST lines or GSTIN; legal review pending); distances are straight-line and PIN lookups depend on free OpenStreetMap coverage, which is patchy for some Indian PINs, so the offline order-by-PIN fallback matters; seeded clinic positions are approximate; the PIN is sent to OpenStreetMap (and India Post for the fallback) and the privacy note on the page says so.
+
+
+## 12. Round 5: automatic supplier routing, split parcels, delivery estimate
+
+Built: orders are routed to the verified suppliers that hold the stock and can deliver soonest, split into parcels when needed, with the estimated arrival, shipping fee and total shown before the patient pays. Exact prescribed products only (no substitution). Shortages ship what exists and back-order the rest, which ships by itself when stock arrives. Suppliers manage stock, dispatch time, shipping fee and PIN in their Products tab.
+
+Tests: t13 (50 checks) covers one parcel from the nearest supplier, forced splits, fewest parcels at equal speed, speed over parcel count, cheapest shipping at a tie, quantity split across suppliers, shortage and automatic back-order shipping, nothing in stock, no overselling across two prescriptions, bill shipping line, supplier validation (stock, PIN, dispatch, fee, restock), geocoder-down fallback, old saved data upgrade, unverified suppliers never used, and phone-width layout. t2 to t12 and t5 still pass.
+
+Limits: delivery times are tiered estimates, not courier promises; the supplier chooses dispatch days, so the estimate is only as honest as that setting; there is no full delivery address (PIN only), no courier tracking, no returns, no per-supplier price (a product has one price); stock is counted by hand by the supplier; the optimiser is exact but small (12 suppliers); Kochi and Hyderabad sample suppliers only.

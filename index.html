@@ -871,6 +871,8 @@ const PROC_INFO={
  "Raktamokshana (leech therapy)":{ail:["psoriasis","eczema","scalppso"],ref:[CR.psoF],sh:1,note:"CCRAS: leech therapy is indicated in certain patients."}
 };
 const PROCS=Object.keys(PROC_INFO);
+const SUP_LOC={s1:{pin:"682001",lat:9.98,lng:76.28,dispatch:1,ship:60,restock:7},s2:{pin:"500001",lat:17.39,lng:78.47,dispatch:1,ship:50,restock:7}};
+function CAT_STOCK(){const st={};CAT_PRODUCTS().forEach((p,i)=>{if(p.status!=="approved")return;const o=p.sup==="s1"?"s2":"s1";st[p.id]={[p.sup]:[30,5,40,12][i%4]};if(i%3===0)st[p.id][o]=[3,8,15,4][i%4]});return st}
 const CAT_LOC={c1:{pin:"682001",lat:9.98,lng:76.28},c2:{pin:"500001",lat:17.39,lng:78.47},c3:{pin:"600001",lat:13.09,lng:80.28}};
 function CAT_CLINICS(addDays){
  const all=(m,x)=>Object.assign({},m,x);
@@ -958,7 +960,13 @@ function seed(){
  };
 }
 let DB;
-function load(){try{const s=localStorage.getItem(LS);if(s){const d=JSON.parse(s);if(!d.users)d.users=seedUsers();if(d.session===undefined)d.session=null;(d.clinics||[]).forEach(c=>{const l=CAT_LOC[c.id];if(l&&!c.pin)Object.assign(c,l)});return d}}catch(e){}return seed()}
+function load(){try{const s=localStorage.getItem(LS);if(s){const d=JSON.parse(s);if(!d.users)d.users=seedUsers();if(d.session===undefined)d.session=null;return fixDB(d)}}catch(e){}return fixDB(seed())}
+function fixDB(d){
+ (d.clinics||[]).forEach(c=>{const l=CAT_LOC[c.id];if(l&&!c.pin)Object.assign(c,l)});
+ (d.suppliers||[]).forEach(x=>{const l=SUP_LOC[x.id];if(l&&!x.pin)Object.assign(x,l)});
+ if(!d.stock)d.stock=CAT_STOCK();
+ if(!d.backorders)d.backorders=[];
+ return d}
 function save(){try{localStorage.setItem(LS,JSON.stringify(DB))}catch(e){}}
 DB=load();
 try{if(/[?&]demo=1/.test(location.search)&&!DB.session)DB.session={demo:true}}catch(e){}
@@ -990,7 +998,7 @@ function nextStep(){
  if(ap.status!=="done"){
   if(S.role==="doctor"&&S.caseId)return null;
   return S.role==="doctor"?go("A patient has booked you. Open the case sheet to review and prescribe.","Open case sheet","doctor","appts",ap.id):go("Booked. The doctor sees you next. For this demo, continue as the doctor.","Continue as doctor","doctor","appts",ap.id)}
- if(rx.meds.length&&st>=2&&!DB.orders.some(o=>o.rx===rx.id))return S.role==="patient"&&S.tab==="meds"?null:go("Prescription issued. Now order your medicines.","Order medicines","patient","meds");
+ if(rx.meds.length&&st>=2&&!DB.orders.some(o=>o.rx===rx.id)&&!DB.backorders.some(b=>b.rx===rx.id))return S.role==="patient"&&S.tab==="meds"?null:go("Prescription issued. Now order your medicines.","Order medicines","patient","meds");
  if(rx.treat.length&&st>=3&&!DB.tbook.some(b=>b.rx===rx.id))return S.role==="patient"&&S.tab==="clinic"?null:go("Your doctor advised a clinic treatment. Now pick a clinic and a date.","Book clinic treatment","patient","clinic");
  const tb=DB.tbook.find(b=>b.rx===rx.id&&b.status==="booked");
  if(tb)return S.role==="clinic"&&S.tab==="bookings"?null:go("Treatment booked. For this demo, continue as the clinic to mark sessions done.","Continue as clinic","clinic","bookings");
@@ -1222,24 +1230,98 @@ VIEWS["patient.care"]=()=>{
   :`<p class="mu sm">Waiting for the consultation. Your doctor will add a prescription after the call.</p>`}<div class="fl" style="margin-top:6px">${billBtn("a",ap.id)}</div></div>`}).join(""):`<div class="card"><p>No appointments yet.</p></div>`}
  <div class="card"><h3>Records</h3><p class="mu sm">Your assessments, kept so every doctor sees the history.</p><ul class="sm">${hist||"<li>None yet</li>"}</ul></div>`;
 };
+/* ---------- medicines: automatic supplier choice, split parcels, delivery estimate ---------- */
+const stockOf=(pid,sid)=>(((DB.stock||{})[pid]||{})[sid])|0;
+const aggr=meds=>{const m={};meds.forEach(x=>{m[x.pid]=(m[x.pid]||0)+x.qty});return Object.keys(m).map(pid=>({pid,qty:m[pid]}))};
+const transitDays=km=>km<50?0:km<300?1:km<800?2:km<1500?3:4;
+const prefixDays=(a,b)=>{a=String(a||"");b=String(b||"");return !a||!b?3:a.slice(0,3)===b.slice(0,3)?0:a.slice(0,2)===b.slice(0,2)?1:a[0]===b[0]?2:3};
+const supLoc=x=>isFinite(x.lat)?{lat:x.lat,lng:x.lng}:(x.pin&&DB.geo&&DB.geo[x.pin]&&isFinite(DB.geo[x.pin].lat)?DB.geo[x.pin]:null);
+function etaFor(x){
+ const P=DB.patient||{},l=supLoc(x),me=P.loc,km=me&&l?kmBetween(me,l):null;
+ const lo=Math.max(1,parseInt(x.dispatch,10)||1)+(km!=null?transitDays(km):prefixDays(P.pin,x.pin));
+ return {lo,hi:lo+1,km}
+}
+const cmpKey=(a,b)=>{for(let i=0;i<a.length;i++)if(a[i]!==b[i])return a[i]-b[i];return 0};
+/* Exact search: try every set of verified suppliers (at most 12, fastest first) that can cover the order.
+   Pick the set whose slowest parcel arrives soonest, then fewest parcels, then lowest shipping. Exact products only. */
+function planFor(lines){
+ const sups=DB.suppliers.filter(x=>x.status==="verified"),info={};
+ sups.forEach(x=>{info[x.id]=Object.assign({fee:Math.max(0,+x.ship||0)},etaFor(x))});
+ const want=[],back=[];
+ lines.forEach(l=>{const tot=sups.reduce((t,x)=>t+stockOf(l.pid,x.id),0),have=Math.min(l.qty,tot);if(have>0)want.push({pid:l.pid,qty:have});if(l.qty>have){const pr=prod(l.pid),ps=pr&&sup(pr.sup);back.push({pid:l.pid,qty:l.qty-have,days:(ps&&parseInt(ps.restock,10))||7})}});
+ const fast=(a,b)=>info[a.id].lo-info[b.id].lo||(a.id<b.id?-1:1);
+ const cand=sups.filter(x=>want.some(w=>stockOf(w.pid,x.id)>0)).sort(fast).slice(0,12);
+ let best=null;
+ if(want.length)for(let m=1;m<(1<<cand.length);m++){
+  const set=cand.filter((_,k)=>m>>k&1);
+  if(!want.every(w=>set.reduce((t,x)=>t+stockOf(w.pid,x.id),0)>=w.qty))continue;
+  const asg={};
+  want.forEach(w=>{
+   const one=set.find(x=>stockOf(w.pid,x.id)>=w.qty);
+   if(one){(asg[one.id]=asg[one.id]||[]).push({pid:w.pid,qty:w.qty});return}
+   let left=w.qty;set.forEach(x=>{const q=Math.min(left,stockOf(w.pid,x.id));if(q>0){(asg[x.id]=asg[x.id]||[]).push({pid:w.pid,qty:q});left-=q}})});
+  const used=Object.keys(asg),key=[Math.max.apply(null,used.map(id=>info[id].lo)),used.length,used.reduce((t,id)=>t+info[id].fee,0)];
+  if(!best||cmpKey(key,best.key)<0)best={key,asg}
+ }
+ const parcels=best?Object.keys(best.asg).map(id=>{const e=info[id];return {sup:id,items:best.asg[id],lo:e.lo,hi:e.hi,fee:e.fee,subtotal:best.asg[id].reduce((t,it)=>t+prod(it.pid).price*it.qty,0)}}).sort((a,b)=>a.lo-b.lo||(a.sup<b.sup?-1:1)):[];
+ const items=parcels.reduce((t,pc)=>t+pc.subtotal,0),ship=parcels.reduce((t,pc)=>t+pc.fee,0);
+ return {parcels,back,items,ship,grand:items+ship}
+}
+const etaTxt=(lo,hi,when)=>`in ${lo} to ${hi} days (by ${fd(addDays(when||new Date(),hi))}), estimated`;
+function makeOrders(rid,plan,late){
+ const grp=uid(),n=plan.parcels.length,now=new Date().toISOString();
+ plan.parcels.forEach((pc,k)=>{
+  pc.items.forEach(it=>{DB.stock[it.pid][pc.sup]-=it.qty});
+  DB.orders.push({id:uid(),rx:rid,grp,i:k+1,n,sup:pc.sup,items:pc.items,total:pc.subtotal,ship:pc.fee,lo:pc.lo,hi:pc.hi,eta:addDays(new Date(),pc.hi),late:!!late,status:"placed",when:now})})
+}
+/* when a supplier adds stock, waiting back-orders ship automatically */
+function fillBackorders(){
+ let n=0;
+ DB.backorders.filter(b=>b.status==="waiting").forEach(b=>{
+  const plan=planFor(b.items);if(!plan.parcels.length)return;
+  makeOrders(b.rx,plan,true);n+=plan.parcels.length;
+  b.items=plan.back.map(x=>({pid:x.pid,qty:x.qty}));if(!b.items.length)b.status="filled"});
+ return n
+}
+function pinAsk(){return `<div class="note sm"><b>Where should we send it?</b> Enter your PIN code. We pick the suppliers that can deliver soonest and show you the dates.<div class="fl" style="margin-top:6px"><input id="np" inputmode="numeric" maxlength="6" placeholder="Your PIN code" aria-label="Your PIN code" style="width:140px"><button class="btn s" onclick="NC.setPin()">Show delivery</button></div></div>`}
+function shipHtml(r){
+ const plan=planFor(aggr(r.meds));
+ const lines=pc=>pc.items.map(it=>E(prod(it.pid).name)+" × "+it.qty).join(", ");
+ return {plan,html:`<div class="note sm"><b>How it will ship</b>${plan.parcels.length>1?` <span class="tag a">${plan.parcels.length} parcels</span>`:""}
+ <ul>${plan.parcels.map((pc,k)=>`<li>${plan.parcels.length>1?"Parcel "+(k+1)+" of "+plan.parcels.length+": ":""}${lines(pc)}<br><span class="mu">From ${E(sup(pc.sup).name.split(" (")[0])} · arrives ${etaTxt(pc.lo,pc.hi)} · shipping ${pc.fee?inr(pc.fee):"free"}</span></li>`).join("")||"<li>None of these medicines is in stock right now.</li>"}</ul>
+ ${plan.back.length?`<p class="warn sm"><b>Not in stock right now:</b> ${plan.back.map(b=>E(prod(b.pid).name)+" × "+b.qty).join(", ")}. Restock is expected in about ${Math.max.apply(null,plan.back.map(b=>b.days))} days. It ships on its own as soon as it arrives, with no extra step from you, and you pay for it now.</p>`:""}
+ <p style="margin:6px 0 0">Medicines ${inr(plan.items)} · Shipping ${plan.ship?inr(plan.ship):"free"} · <b>Total ${inr(plan.grand)}</b></p></div>`}
+}
 VIEWS["patient.meds"]=()=>{
- const rxs=DB.rx.filter(r=>r.meds.length).reverse();
+ const rxs=DB.rx.filter(r=>r.meds.length).reverse(),P=DB.patient||{};
  const cat=DB.products.filter(p=>p.status==="approved"&&sup(p.sup).status==="verified");
+ const ordered=r=>DB.orders.some(o=>o.rx===r.id)||DB.backorders.some(b=>b.rx===r.id);
+ const need=rxs.some(r=>!ordered(r))&&!(P.pin||P.loc);
+ setTimeout(nearEnsure,0);
  return `<h2>Medicines</h2><div class="note"><b>Prescription needed</b>Medicines are sold only against a prescription from a registered doctor. The catalogue below is view-only until your doctor prescribes.</div>
- ${rxs.map(r=>{const done=DB.orders.filter(o=>o.rx===r.id);
+ ${need?pinAsk():""}
+ ${rxs.map(r=>{const done=DB.orders.filter(o=>o.rx===r.id),bo=DB.backorders.filter(b=>b.rx===r.id&&b.status==="waiting");
+  const sh=!ordered(r)&&(P.pin||P.loc)?shipHtml(r):null;
   return `<div class="card"><h3>From ${E(doc(r.doctor).name)} · ${fd(r.when)}</h3><table><tr><th>Product</th><th>Doctor's dose</th><th>Qty</th><th>Price</th></tr>${r.meds.map(m=>{const p=prod(m.pid);return `<tr><td>${E(p.name)}<br><span class="tag g">GMP verified</span> <span class="mu sm">${E(sup(p.sup).name)} · batch ${E(p.batch)}</span></td><td>${E(m.dose)}</td><td>${m.qty}</td><td>${inr(p.price*m.qty)}</td></tr>`}).join("")}</table>
-  <p><b>Total ${inr(rxTotal(r))}</b></p>
-  ${done.length?done.map(o=>`<span class="tag a">${E(sup(o.sup).name.split(" (")[0])}: ${E(o.status)}</span> ${billBtn("o",o.id)}`).join(" "):`<button class="btn s" onclick="NC.placeOrder('${r.id}')">Place order (mock payment)</button>`}</div>`}).join("")||`<div class="card"><p class="mu">No prescription yet. Book a doctor first.</p></div>`}
+  <p><b>Medicines ${inr(rxTotal(r))}</b></p>
+  ${sh?sh.html:""}
+  ${done.length?done.map(o=>`<div class="fl" style="border-top:1px solid var(--ln);padding:8px 0"><span class="sm" style="flex:1"><b>${o.n>1?"Parcel "+o.i+" of "+o.n:"Your parcel"}</b> from ${E(sup(o.sup).name.split(" (")[0])} <span class="tag ${o.status==="delivered"?"g":"a"}">${E(o.status)}</span><br>${o.items.map(i=>E(prod(i.pid).name)+" × "+i.qty).join(", ")}<br><span class="mu">${o.status==="delivered"?"Delivered":(o.eta?"Expected by "+fd(o.eta)+" (estimated, "+o.lo+" to "+o.hi+" days after "+(o.late?"restock":"ordering")+")":"")}${o.ship?" · shipping "+inr(o.ship):""}</span></span>${billBtn("o",o.id)}</div>`).join(""):""}
+  ${bo.map(b=>`<p class="warn sm"><b>Waiting for stock:</b> ${b.items.map(i=>E(prod(i.pid).name)+" × "+i.qty).join(", ")}. We will ship it automatically when it is back in stock.</p>`).join("")}
+  ${!ordered(r)?`<button class="btn s" ${sh&&sh.plan.parcels.length+sh.plan.back.length?"":"disabled"} onclick="NC.placeOrder('${r.id}')">Place order (mock payment)${sh?" · "+inr(sh.plan.grand):""}</button>`:""}</div>`}).join("")||`<div class="card"><p class="mu">No prescription yet. Book a doctor first.</p></div>`}
  <details class="card"><summary><b>Verified catalogue (view only)</b></summary><p class="mu sm">Every product here comes from a supplier whose licence, GMP certificate and batch test report were checked by admin.</p>
  <table><tr><th>Product</th><th>Supplier</th><th>Price</th></tr>${cat.map(p=>`<tr><td>${E(p.name)}<br><span class="mu sm">${E(p.form)}</span></td><td class="sm">${E(sup(p.sup).name)}</td><td>${inr(p.price)}</td></tr>`).join("")}</table></details>`;
 };
 function placeOrder(rid){
- const r=DB.rx.find(x=>x.id===rid),by={};
+ const r=DB.rx.find(x=>x.id===rid),P=DB.patient||{};
+ if(!r)return;
  const bad=r.meds.find(m=>{const p=prod(m.pid);return !p||p.status!=="approved"||sup(p.sup).status!=="verified"||(p.hm&&!p.ht)});
  if(bad){toast("A product on this prescription is not approved, so the order cannot be placed");return}
- r.meds.forEach(m=>{const p=prod(m.pid);(by[p.sup]=by[p.sup]||[]).push(m)});
- Object.keys(by).forEach(s=>{const items=by[s].map(m=>({pid:m.pid,qty:m.qty}));DB.orders.push({id:uid(),rx:rid,sup:s,items,total:items.reduce((t,i)=>t+prod(i.pid).price*i.qty,0),status:"placed",when:new Date().toISOString()})});
- save();toast("Order placed (mock)");render();scrollTo(0,0);
+ if(DB.orders.some(o=>o.rx===rid)||DB.backorders.some(b=>b.rx===rid)){toast("This prescription has already been ordered");return}
+ if(!(P.pin||P.loc)){toast("Add your PIN code first so we can work out delivery");return}
+ const plan=planFor(aggr(r.meds));
+ makeOrders(rid,plan,false);
+ if(plan.back.length)DB.backorders.push({id:uid(),rx:rid,items:plan.back.map(x=>({pid:x.pid,qty:x.qty})),when:new Date().toISOString(),status:"waiting"});
+ save();toast(plan.parcels.length?(plan.parcels.length>1?"Order placed in "+plan.parcels.length+" parcels (mock)":"Order placed (mock)"):"Order recorded. It ships when back in stock");render();scrollTo(0,0);
 }
 VIEWS["patient.clinic"]=()=>{
  const rxs=DB.rx.filter(r=>r.treat.length).reverse(),r=rxs[0],done=r&&DB.tbook.find(b=>b.rx===r.id),P=DB.patient;
@@ -1298,9 +1380,9 @@ async function nearEnsure(){
  if(nearBusy)return;nearBusy=true;let ch=false;S.geoFail=S.geoFail||{};
  try{const P=DB.patient;
   if(P.pin&&!P.loc&&!S.geoFail[P.pin]){const g=await geoPin(P.pin);if(g){P.loc={lat:g.lat,lng:g.lng,src:"pin"};ch=true}else{S.geoFail[P.pin]=1;ch=true}}
-  for(const c of DB.clinics){if(!clinicLoc(c)&&c.pin&&!S.geoFail[c.pin]){const g=await geoPin(c.pin);if(g)ch=true;else S.geoFail[c.pin]=1}}
+  for(const c of DB.clinics.concat(DB.suppliers.filter(x=>x.status==="verified"))){if(!clinicLoc(c)&&c.pin&&!S.geoFail[c.pin]){const g=await geoPin(c.pin);if(g)ch=true;else S.geoFail[c.pin]=1}}
  }finally{nearBusy=false}
- if(ch){save();if(S.role==="patient"&&S.tab==="clinic")render()}
+ if(ch){save();if(S.role==="patient"&&(S.tab==="clinic"||S.tab==="meds"))render()}
 }
 function setPin(){const v=val("np");if(!PIN_RE.test(v)){toast("Enter a 6-digit PIN code");return}const P=DB.patient;P.pin=v;P.loc=null;if(S.geoFail)delete S.geoFail[v];save();render()}
 function useLoc(){
@@ -1318,8 +1400,8 @@ function billFor(k,id){
  if(k==="a"){const x=DB.appts.find(y=>y.id===id);if(!x)return null;const d=doc(x.doctor)||{};
   return Object.assign(b,{no:billNo(k,x),title:x.review?"Follow-up consultation":"Online consultation",date:x.when,provider:d.name||"Doctor",provReg:d.regno?"Council registration no. "+d.regno:"",extra:"Appointment slot: "+x.slot,lines:[{d:(x.review?"Follow-up consultation":"Online consultation")+", "+x.slot,q:1,u:x.fee,a:x.fee}],total:x.fee,pay:"Paid online (mock payment, no real money was taken)"})}
  if(k==="o"){const x=DB.orders.find(y=>y.id===id);if(!x)return null;const s=sup(x.sup)||{};
-  const lines=x.items.map(i=>{const p=prod(i.pid)||{};return {d:(p.name||"Item")+(p.batch?" (batch "+p.batch+")":""),q:i.qty,u:p.price||0,a:(p.price||0)*i.qty}});
-  return Object.assign(b,{no:billNo(k,x),title:"Medicines order",date:x.when,provider:s.name||"Supplier",provReg:s.licence?"Drug licence no. "+s.licence:"",extra:"Order status: "+x.status,lines,total:lines.reduce((t,l)=>t+l.a,0),pay:"Paid online (mock payment, no real money was taken)"})}
+  const lines=x.items.map(i=>{const p=prod(i.pid)||{};return {d:(p.name||"Item")+(p.batch?" (batch "+p.batch+")":""),q:i.qty,u:p.price||0,a:(p.price||0)*i.qty}});if(x.ship)lines.push({d:"Shipping"+(x.n>1?" (parcel "+x.i+" of "+x.n+")":""),q:1,u:x.ship,a:x.ship});
+  return Object.assign(b,{no:billNo(k,x),title:"Medicines order",date:x.when,provider:s.name||"Supplier",provReg:s.licence?"Drug licence no. "+s.licence:"",extra:(x.n>1?"Parcel "+x.i+" of "+x.n+". ":"")+"Order status: "+x.status+(x.eta?". Estimated arrival "+fd(x.eta):""),lines,total:lines.reduce((t,l)=>t+l.a,0),pay:"Paid online (mock payment, no real money was taken)"})}
  if(k==="t"){const x=DB.tbook.find(y=>y.id===id);if(!x)return null;const c=cli(x.clinic)||{};
   const lines=x.items.map(i=>({d:i.name+", "+i.sessions+(i.sessions>1?" sessions":" session"),q:i.sessions,u:i.price,a:i.price*i.sessions}));
   return Object.assign(b,{no:billNo(k,x),title:"Clinic treatment",date:x.when,provider:c.name||"Clinic",provReg:c.regno?"Clinic registration no. "+c.regno:"",extra:"Treatment start date: "+x.date,lines,total:lines.reduce((t,l)=>t+l.a,0),pay:"To be paid at the clinic. Nothing has been paid yet."})}
@@ -1520,7 +1602,8 @@ VIEWS["supplier.products"]=()=>{
  <label class="ck"><input type="checkbox" id="sr" ${s.report?"checked":""}><span>I have batch test reports (COA) for the products I list</span></label>
  <button class="btn s" onclick="NC.submitSup()">Submit for verification</button></div>`}
  ${fold("sup_products","Your products ("+ps.length+")",`<table><tr><th>Product</th><th>Batch</th><th>Price</th><th>Status</th></tr>${ps.map(p=>`<tr><td>${E(p.name)}<br><span class="mu sm">${E(p.form)}</span></td><td>${E(p.batch||"-")}</td><td>${inr(p.price)}</td><td><span class="tag ${p.status==="approved"?"g":p.status==="rejected"?"w":"a"}">${p.status}</span>${p.status==="rejected"&&p.reason?`<br><span class="mu sm">${E(p.reason)}</span>`:""}</td></tr>`).join("")||"<tr><td colspan=4>None</td></tr>"}</table>`,ps.length<=3)}
- <div class="card"><h3>Add a product</h3><div class="fl"><input id="an" placeholder="Product name"><input id="af" placeholder="Form and pack, e.g. Oil, 200 ml"><input id="ap" type="number" placeholder="Price" style="width:100px"><input id="ab" placeholder="Batch no."></div>
+ ${s.status==="verified"?stockFold(s):""}
+ <div class="card"><h3>Add a product</h3><div class="fl"><input id="an" placeholder="Product name"><input id="af" placeholder="Form and pack, e.g. Oil, 200 ml"><input id="ap" type="number" placeholder="Price" style="width:100px"><input id="ab" placeholder="Batch no."><input id="aq" type="number" min="0" placeholder="Units in stock" aria-label="Units in stock" style="width:120px"></div>
  <label class="ck"><input type="checkbox" id="ac"><span>Batch test report attached for this batch</span></label><label class="ck"><input type="checkbox" id="ahm"><span>Contains minerals, metals or Rasa ingredients (bhasma, lauha, rasa, gandhaka)</span></label><label class="ck"><input type="checkbox" id="aht"><span>Heavy-metal assay (lead, mercury, arsenic) report available for this batch</span></label>
  <p class="mu sm">For mineral or Rasa products, give the assay details. Admin checks them before approval.</p>
  <div class="fl"><input id="aal" placeholder="Assay lab name" aria-label="Assay lab name"><input id="aan" placeholder="Assay report no." aria-label="Assay report number"><label class="sm">Test date <input id="aad" type="date" max="${isoDay(new Date())}"></label></div><button class="btn s" onclick="NC.addProduct()">Submit for approval</button></div>`;
@@ -1537,13 +1620,50 @@ function addProduct(){
   if(dt>isoDay(new Date())){toast("The assay date cannot be in the future");return}
   assay={lab,no,date:dt};
  }
- DB.products.push({id:uid(),sup:S.sup,name:n,form:f,price:p,batch:b,status:"pending",ail:[],ref:[],hm,ht:hm&&!!assay,assay,note:""});save();toast("Submitted for approval");render();
+ const q=Math.max(0,parseInt(($("aq")||{}).value,10)||0),pid=uid();
+ DB.products.push({id:pid,sup:S.sup,name:n,form:f,price:p,batch:b,status:"pending",ail:[],ref:[],hm,ht:hm&&!!assay,assay,note:""});DB.stock[pid]={[S.sup]:q};save();toast("Submitted for approval");render();
 }
 VIEWS["supplier.orders"]=()=>{
  const os=DB.orders.filter(o=>o.sup===S.sup).slice().reverse();
- return `<h2>Orders</h2>${os.length?os.map(o=>`<div class="card"><h3>Order ${o.id} · ${fd(o.when)} <span class="tag a">${o.status}</span></h3><ul class="sm">${o.items.map(i=>`<li>${E(prod(i.pid).name)} × ${i.qty}</li>`).join("")}</ul><p><b>${inr(o.total)}</b> <span class="mu sm">Placed against a prescription</span></p>
+ return `<h2>Orders</h2>${os.length?os.map(o=>`<div class="card"><h3>Order ${o.id} · ${fd(o.when)} <span class="tag a">${o.status}</span></h3><ul class="sm">${o.items.map(i=>`<li>${E(prod(i.pid).name)} × ${i.qty}</li>`).join("")}</ul><p><b>${inr(o.total)}</b>${o.ship?` + shipping ${inr(o.ship)}`:""} <span class="mu sm">Placed against a prescription${o.n>1?" · parcel "+o.i+" of "+o.n:""}</span></p>
+ <p class="sm">Ship to: ${E(DB.patient.name||"Patient")}, PIN ${E(DB.patient.pin||"not given")}${o.eta?`<br>Customer was told: arrives by <b>${fd(o.eta)}</b> (${o.lo} to ${o.hi} days). Dispatch within ${Math.max(1,parseInt(sup(o.sup).dispatch,10)||1)} day(s).`:""}</p>
  <div class="fl">${o.status==="placed"?`<button class="btn s" onclick="NC.setOrder('${o.id}','dispatched')">Mark dispatched</button>`:""}${o.status==="dispatched"?`<button class="btn s" onclick="NC.setOrder('${o.id}','delivered')">Mark delivered</button>`:""}</div></div>`).join(""):`<div class="card"><p class="mu">No orders yet.</p></div>`}`;
 };
+function stockFold(s){
+ const has=p=>((DB.stock||{})[p.id]||{})[s.id]!==undefined;
+ const mine=DB.products.filter(p=>p.status==="approved"&&(p.sup===s.id||has(p)));
+ const others=DB.products.filter(p=>p.status==="approved"&&p.sup!==s.id&&!has(p));
+ return fold("sup_stock","Stock and dispatch",`<p class="mu sm">Patients' orders are sent to the verified suppliers who can deliver soonest, using the stock you enter here. Keep it up to date: when a product runs out, the patient is told it is back-ordered.</p>
+ <table><tr><th>Product</th><th>Units in stock</th></tr>${mine.map(p=>`<tr><td class="sm">${E(p.name)}<br><span class="mu">${E(p.form)}${p.sup!==s.id?" · listed by "+E(sup(p.sup).name.split(" (")[0]):""}</span></td><td><input id="st_${p.id}" type="number" min="0" value="${stockOf(p.id,s.id)}" aria-label="Units in stock for ${E(p.name)}" style="width:90px"></td></tr>`).join("")||"<tr><td colspan=2>No approved products yet.</td></tr>"}</table>
+ <button class="btn s" onclick="NC.saveStock()">Save stock</button>
+ ${others.length?`<p class="sm" style="margin-top:10px"><b>Also stock a product another supplier lists?</b> Same product, same price, same batch rules. Exact products only.</p><div class="fl"><select id="dv_p" aria-label="Product to stock">${others.map(p=>`<option value="${p.id}">${E(p.name)}</option>`).join("")}</select><input id="dv_q" type="number" min="1" placeholder="Units" aria-label="Units to stock" style="width:90px"><button class="btn s" onclick="NC.addDistrib()">Add</button></div>`:""}
+ <p class="sm" style="margin-top:12px"><b>Dispatch and delivery</b></p>
+ <div class="grid" style="gap:8px"><label class="sm">Your PIN code<br><input id="sp_pin" inputmode="numeric" maxlength="6" value="${E(s.pin||"")}"></label><label class="sm">Dispatch within (days, 1 to 7)<br><input id="sp_d" type="number" min="1" max="7" value="${s.dispatch||1}"></label><label class="sm">Shipping fee per parcel (₹)<br><input id="sp_f" type="number" min="0" max="5000" value="${s.ship||0}"></label><label class="sm">Restock time (days)<br><input id="sp_r" type="number" min="1" max="60" value="${s.restock||7}"></label></div>
+ <button class="btn s" onclick="NC.saveShip()">Save dispatch settings</button>`,false)
+}
+function saveStock(){
+ const s=sup(S.sup);let bad=false;const upd={};
+ DB.products.forEach(p=>{const e=$("st_"+p.id);if(!e)return;const v=e.value.trim();const n=Number(v);if(v===""||!Number.isInteger(n)||n<0||n>100000)bad=true;else upd[p.id]=n});
+ if(bad){toast("Stock must be a whole number from 0 to 100000");return}
+ Object.keys(upd).forEach(id=>{(DB.stock[id]=DB.stock[id]||{})[s.id]=upd[id]});
+ const sent=fillBackorders();save();toast(sent?"Stock saved. "+sent+" waiting parcel"+(sent>1?"s":"")+" now routed":"Stock saved");render()
+}
+function addDistrib(){
+ const s=sup(S.sup),p=prod(($("dv_p")||{}).value),q=parseInt(($("dv_q")||{}).value,10);
+ if(s.status!=="verified"){toast("Only verified suppliers can stock products");return}
+ if(!p||p.status!=="approved"){toast("Choose an approved product");return}
+ if(!(q>0&&q<=100000)){toast("Enter how many units you hold");return}
+ (DB.stock[p.id]=DB.stock[p.id]||{})[s.id]=q;const sent=fillBackorders();save();toast("Added to your stock");render()
+}
+function saveShip(){
+ const s=sup(S.sup),pin=val("sp_pin"),d=parseInt(val("sp_d"),10),f=Number(val("sp_f")),r=parseInt(val("sp_r"),10);
+ if(!PIN_RE.test(pin)){toast("Enter your 6-digit PIN code");return}
+ if(!(d>=1&&d<=7)){toast("Dispatch time must be 1 to 7 days");return}
+ if(!(f>=0&&f<=5000)){toast("Shipping fee must be between 0 and 5000");return}
+ if(!(r>=1&&r<=60)){toast("Restock time must be 1 to 60 days");return}
+ if(pin!==s.pin){s.pin=pin;delete s.lat;delete s.lng;geoPin(pin).then(g=>{if(g){save();render()}})}
+ s.dispatch=d;s.ship=f;s.restock=r;save();toast("Dispatch settings saved");render()
+}
 function setOrder(id,st){DB.orders.find(o=>o.id===id).status=st;save();render()}
 /* ---------- CLINIC ---------- */
 VIEWS["clinic.bookings"]=()=>{
@@ -1679,15 +1799,16 @@ function obCheck(email,phone){
  return "";
 }
 function onboardSup(){
- const n=val("ob_sn"),c=val("ob_sc"),e=val("ob_se").toLowerCase(),ph=val("ob_sp"),st=val("ob_ss"),l=val("ob_sl"),g=val("ob_sg"),r=!!($("ob_sr")||{}).checked;
+ const n=val("ob_sn"),c=val("ob_sc"),pin=val("ob_sz"),e=val("ob_se").toLowerCase(),ph=val("ob_sp"),st=val("ob_ss"),l=val("ob_sl"),g=val("ob_sg"),r=!!($("ob_sr")||{}).checked;
  if(n.length<3){toast("Enter the supplier's company name");return}
  if(c.length<2){toast("Enter the contact person's name");return}
  const er=obCheck(e,ph);if(er){toast(er);return}
+ if(!/^[1-9]\d{5}$/.test(pin)){toast("Enter the supplier's 6-digit dispatch PIN code");return}
  if(l.length<5){toast("Enter the drug manufacturing licence number");return}
  if(DB.suppliers.some(x=>x.licence&&x.licence.toLowerCase()===l.toLowerCase())){toast("A supplier with this licence number is already on file");return}
  if(DB.suppliers.some(x=>x.name.toLowerCase()===n.toLowerCase())){toast("A supplier with this name is already on file");return}
- const id="s"+uid();DB.suppliers.push({id,name:n,licence:l,gmp:g,report:r,status:"pending",contact:c,email:e,phone:ph,state:st,since:new Date().toISOString()});
- mkLogin("supplier",id,n,e);save();toast("Supplier onboarded. Verification is pending.");S.fold.ad_sup=true;render()
+ const id="s"+uid();DB.suppliers.push({id,name:n,pin,dispatch:1,ship:0,restock:7,licence:l,gmp:g,report:r,status:"pending",contact:c,email:e,phone:ph,state:st,since:new Date().toISOString()});
+ mkLogin("supplier",id,n,e);geoPin(pin).then(g=>{if(g)save()});save();toast("Supplier onboarded. Verification is pending.");S.fold.ad_sup=true;render()
 }
 function onboardDoc(){
  const n=val("ob_dn"),q=val("ob_dq"),ex=parseInt(val("ob_dx"),10),lg=val("ob_dl"),fee=parseInt(val("ob_df"),10),rn=val("ob_dr"),cn=val("ob_dc"),e=val("ob_de").toLowerCase(),ph=val("ob_dp");
@@ -1729,7 +1850,7 @@ VIEWS["admin.onboard"]=()=>{
   <label class="sm" style="display:block;margin-top:8px">Weekly slots, comma separated<br><input id="ob_ds" placeholder="Mon 10:00, Wed 17:00"></label>
   <p class="mu sm">The doctor stays unverified, and patients cannot book them, until they upload a photo of their council registration certificate and you approve it under Verification.</p>
   <button class="btn" onclick="NC.onboardDoc()">Onboard doctor</button>`,true)}
- ${fold("ob_sup","Onboard a supplier",`<div class="grid" style="gap:8px">${f("ob_sn","Company name")}${f("ob_sc","Contact person")}${f("ob_se","Contact email","name@company.com","email")}${f("ob_sp","Contact phone","","tel")}${f("ob_ss","State")}${f("ob_sl","Drug manufacturing licence number")}${f("ob_sg","GMP certificate details (optional now)","Certificate and valid-to date")}</div>
+ ${fold("ob_sup","Onboard a supplier",`<div class="grid" style="gap:8px">${f("ob_sn","Company name")}${f("ob_sc","Contact person")}${f("ob_se","Contact email","name@company.com","email")}${f("ob_sp","Contact phone","","tel")}${f("ob_ss","State")}${f("ob_sz","Dispatch PIN code","6 digits")}${f("ob_sl","Drug manufacturing licence number")}${f("ob_sg","GMP certificate details (optional now)","Certificate and valid-to date")}</div>
   <label class="ck"><input type="checkbox" id="ob_sr"><span>Batch test report received (optional now)</span></label>
   <p class="mu sm">The licence number is required. Missing documents keep the supplier in the verification queue until they are provided.</p>
   <button class="btn" onclick="NC.onboardSup()">Onboard supplier</button>`,true)}
@@ -1743,7 +1864,7 @@ function dismissCred(){S.cred=null;render()}
 VIEWS["admin.cat"]=()=>catView(DB,inr);
 const _done=window.onAssessmentDone;window.onAssessmentDone=s=>{_done(s);startedThisRun0=false;maxReach=-1;
  const m=DB.metrics;m.reach=m.reach||[];if(Q.length){m.reach[Q.length]=(m.reach[Q.length]||0)}save()};
-return {get DB(){return DB},dlBill,setPin,useLoc,forgetLoc,authTab,sendReset,doReset,changePw,pwToggle,adminReset,certPick,rejectDoc,doLogin,doRegister,demoMode,logout,onboardSup,onboardClinic,onboardDoc,dismissCred,foldSet,rejectProd,nextGo,render,setRole,setTab,setStage,goto,setCtx,reqLead,pickSlot,confirmBook,placeOrder,bookClinic,logFollow,setRemind,bookReview,openCase,closeCase,dr,drTest,drAddMed,drDelMed,pickAgree,drOtherTest,drAddTreat,drDelTreat,issueRx,markLead,pickPlan,submitSup,addProduct,setOrder,setBooking,saveAudit,verifyDoc,approveSup,approveProd,recordAudit,saveSettings,resetAll,sim};
+return {get DB(){return DB},saveStock,addDistrib,saveShip,dlBill,setPin,useLoc,forgetLoc,authTab,sendReset,doReset,changePw,pwToggle,adminReset,certPick,rejectDoc,doLogin,doRegister,demoMode,logout,onboardSup,onboardClinic,onboardDoc,dismissCred,foldSet,rejectProd,nextGo,render,setRole,setTab,setStage,goto,setCtx,reqLead,pickSlot,confirmBook,placeOrder,bookClinic,logFollow,setRemind,bookReview,openCase,closeCase,dr,drTest,drAddMed,drDelMed,pickAgree,drOtherTest,drAddTreat,drDelTreat,issueRx,markLead,pickPlan,submitSup,addProduct,setOrder,setBooking,saveAudit,verifyDoc,approveSup,approveProd,recordAudit,saveSettings,resetAll,sim};
 })();
 
 NC.render();
