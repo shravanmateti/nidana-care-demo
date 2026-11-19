@@ -118,8 +118,8 @@ function addProduct(){
 VIEWS["supplier.orders"]=()=>{
  const os=DB.orders.filter(o=>o.sup===S.sup).slice().reverse();
  return `<h2>Orders</h2>${os.length?os.map(o=>`<div class="card"><h3>Order ${o.id} · ${fd(o.when)} <span class="tag a">${o.status}</span></h3><ul class="sm">${o.items.map(i=>`<li>${E(prod(i.pid).name)} × ${i.qty}</li>`).join("")}</ul><p><b>${inr(o.total)}</b>${o.ship?` + shipping ${inr(o.ship)}`:""} <span class="mu sm">Placed against a prescription${o.n>1?" · parcel "+o.i+" of "+o.n:""}</span></p>
- <p class="sm">Ship to: ${E(DB.patient.name||"Patient")}, PIN ${E(DB.patient.pin||"not given")}${o.eta?`<br>Customer was told: arrives by <b>${fd(o.eta)}</b> (${o.lo} to ${o.hi} days). Dispatch within ${Math.max(1,parseInt(sup(o.sup).dispatch,10)||1)} day(s).`:""}</p>
- <div class="fl">${o.status==="placed"?`<button class="btn s" onclick="NC.setOrder('${o.id}','dispatched')">Mark dispatched</button>`:""}${o.status==="dispatched"?`<button class="btn s" onclick="NC.setOrder('${o.id}','delivered')">Mark delivered</button>`:""}</div></div>`).join(""):`<div class="card"><p class="mu">No orders yet.</p></div>`}`;
+ <p class="sm"><b>Ship to:</b> ${o.to&&addrOk(o.to)?E(o.to.name)+" · "+E(o.to.phone)+"<br>"+E(addrLine(o.to)):E(DB.patient.name||"Patient")+", PIN "+E(DB.patient.pin||"not given")}${o.status!=="placed"&&o.courier?`<br>Courier: ${E(o.courier)} · tracking no. ${E(o.awb)}`:""}${o.eta?`<br>Customer was told: arrives by <b>${fd(o.eta)}</b> (${o.lo} to ${o.hi} days). Dispatch within ${Math.max(1,parseInt(sup(o.sup).dispatch,10)||1)} day(s).`:""}</p>
+ <div class="fl">${o.status==="placed"?`<input id="cr_${o.id}" placeholder="Courier name" aria-label="Courier name" style="flex:1;min-width:120px"><input id="tn_${o.id}" placeholder="Tracking number" aria-label="Tracking number" style="flex:1;min-width:120px"><button class="btn s" onclick="NC.setOrder('${o.id}','dispatched')">Mark dispatched</button>`:""}${o.status==="dispatched"?`<button class="btn s" onclick="NC.setOrder('${o.id}','delivered')">Mark delivered</button>`:""}</div></div>`).join(""):`<div class="card"><p class="mu">No orders yet.</p></div>`}`;
 };
 function stockFold(s){
  const has=p=>((DB.stock||{})[p.id]||{})[s.id]!==undefined;
@@ -156,7 +156,19 @@ function saveShip(){
  if(pin!==s.pin){s.pin=pin;delete s.lat;delete s.lng;geoPin(pin).then(g=>{if(g){save();render()}})}
  s.dispatch=d;s.ship=f;s.restock=r;save();toast("Dispatch settings saved");render()
 }
-function setOrder(id,st){DB.orders.find(o=>o.id===id).status=st;save();render()}
+function setOrder(id,st){
+ const o=DB.orders.find(x=>x.id===id);if(!o)return;
+ if(st==="dispatched"){
+  if(o.status!=="placed")return;
+  const c=val("cr_"+id),n=val("tn_"+id);
+  if(c.length<2){toast("Enter the courier name so the patient can track the parcel");return}
+  if(n.length<4){toast("Enter the courier tracking number");return}
+  o.courier=c;o.awb=n
+ }else if(st==="delivered"){
+  if(o.status!=="dispatched"){toast("Mark it dispatched first");return}
+ }else return;
+ o.status=st;(o.track=o.track||[{s:"placed",t:o.when}]).push({s:st,t:new Date().toISOString()});save();render()
+}
 /* ---------- CLINIC ---------- */
 VIEWS["clinic.bookings"]=()=>{
  const c=cli(S.cli),bs=DB.tbook.filter(b=>b.clinic===c.id).slice().reverse();

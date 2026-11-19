@@ -39,7 +39,7 @@ VIEWS["patient.care"]=()=>{
   ${r.treat.length?`<p class="sm"><b>Clinic treatment advised:</b> ${r.treat.map(t=>E(t.name)+" × "+t.sessions).join("; ")}</p>`:""}
   ${r.advice?`<p class="sm"><b>Advice:</b> ${E(r.advice)}</p>`:""}
   <p class="sm"><b>Follow-up:</b> ${fd(r.follow)}</p>
-  <div class="fl">${r.meds.length&&S.stage>=2?`<button class="btn s" onclick="NC.goto('patient','meds')">Order medicines</button>`:""}${r.treat.length&&S.stage>=3?`<button class="btn s" onclick="NC.goto('patient','clinic')">Book clinic treatment</button>`:""}<button class="btn g s" onclick="NC.goto('patient','follow')">Follow-up</button></div>`
+  <div class="fl">${r.meds.length&&S.stage>=2?`<button class="btn s" onclick="NC.goto('patient','meds')">${DB.orders.some(o=>o.rx===r.id)||DB.backorders.some(b=>b.rx===r.id)?"Track your order":"Order medicines"}</button>`:""}${r.treat.length&&S.stage>=3?`<button class="btn s" onclick="NC.goto('patient','clinic')">Book clinic treatment</button>`:""}<button class="btn g s" onclick="NC.goto('patient','follow')">Follow-up</button></div>`
   :`<p class="mu sm">Waiting for the consultation. Your doctor will add a prescription after the call.</p>`}<div class="fl" style="margin-top:6px">${billBtn("a",ap.id)}</div></div>`}).join(""):`<div class="card"><p>No appointments yet.</p></div>`}
  <div class="card"><h3>Records</h3><p class="mu sm">Your assessments, kept so every doctor sees the history.</p><ul class="sm">${hist||"<li>None yet</li>"}</ul></div>`;
 };
@@ -85,7 +85,7 @@ function makeOrders(rid,plan,late){
  const grp=uid(),n=plan.parcels.length,now=new Date().toISOString();
  plan.parcels.forEach((pc,k)=>{
   pc.items.forEach(it=>{DB.stock[it.pid][pc.sup]-=it.qty});
-  DB.orders.push({id:uid(),rx:rid,grp,i:k+1,n,sup:pc.sup,items:pc.items,total:pc.subtotal,ship:pc.fee,lo:pc.lo,hi:pc.hi,eta:addDays(new Date(),pc.hi),late:!!late,status:"placed",when:now})})
+  DB.orders.push({id:uid(),rx:rid,grp,i:k+1,n,sup:pc.sup,to:Object.assign({},(DB.patient||{}).addr),track:[{s:"placed",t:now}],items:pc.items,total:pc.subtotal,ship:pc.fee,lo:pc.lo,hi:pc.hi,eta:addDays(new Date(),pc.hi),late:!!late,status:"placed",when:now})})
 }
 /* when a supplier adds stock, waiting back-orders ship automatically */
 function fillBackorders(){
@@ -96,7 +96,35 @@ function fillBackorders(){
   b.items=plan.back.map(x=>({pid:x.pid,qty:x.qty}));if(!b.items.length)b.status="filled"});
  return n
 }
-function pinAsk(){return `<div class="note sm"><b>Where should we send it?</b> Enter your PIN code. We pick the suppliers that can deliver soonest and show you the dates.<div class="fl" style="margin-top:6px"><input id="np" inputmode="numeric" maxlength="6" placeholder="Your PIN code" aria-label="Your PIN code" style="width:140px"><button class="btn s" onclick="NC.setPin()">Show delivery</button></div></div>`}
+const addrOk=a=>!!a&&String(a.name||"").trim().length>=2&&okPhone(String(a.phone||""))&&String(a.line||"").trim().length>=5&&String(a.city||"").trim().length>=2&&String(a.state||"").trim().length>=2&&PIN_RE.test(String(a.pin||""));
+const addrLine=a=>[a.line,a.area,a.city+", "+a.state+" "+a.pin].filter(Boolean).join(", ");
+function addrCard(){
+ const P=DB.patient||{},a=P.addr,ok=addrOk(a);
+ if(ok&&!S.addrEdit)return `<div class="card"><h3>Delivery address</h3><p class="sm">${E(a.name)} · ${E(a.phone)}<br>${E(a.line)}${a.area?", "+E(a.area):""}<br>${E(a.city)}, ${E(a.state)} ${E(a.pin)}</p><button class="btn g s" onclick="NC.addrToggle()">Change address</button></div>`;
+ const v=a||{name:P.name||"",phone:P.phone||"",pin:P.pin||""},f=(id,l,val,o="")=>`<label class="sm">${l}<br><input id="${id}" value="${E(val||"")}" ${o}></label>`;
+ return `<div class="card"><h3>Where should we deliver?</h3><p class="mu sm">Asked once. We use it to pick the suppliers that can deliver soonest and to show you the dates. Only the supplier shipping your parcel sees it.</p>
+ <div class="grid" style="gap:8px">${f("ad_n","Full name",v.name,'autocomplete="name"')}${f("ad_p","Mobile number",v.phone,'inputmode="tel" autocomplete="tel"')}${f("ad_l","House number and street",v.line,'autocomplete="address-line1"')}${f("ad_a","Area or landmark (optional)",v.area,'autocomplete="address-line2"')}${f("ad_c","City",v.city,'autocomplete="address-level2"')}${f("ad_s","State",v.state,'autocomplete="address-level1"')}${f("ad_z","PIN code",v.pin,'inputmode="numeric" maxlength="6" autocomplete="postal-code"')}</div>
+ <div class="fl" style="margin-top:8px"><button class="btn s" onclick="NC.saveAddr()">Save address</button>${ok?`<button class="btn g s" onclick="NC.addrToggle()">Cancel</button>`:""}</div></div>`
+}
+function addrToggle(){S.addrEdit=!S.addrEdit;render()}
+function saveAddr(){
+ const a={name:val("ad_n"),phone:val("ad_p"),line:val("ad_l"),area:val("ad_a"),city:val("ad_c"),state:val("ad_s"),pin:val("ad_z")};
+ if(a.name.length<2){toast("Enter your full name");return}
+ if(!okPhone(a.phone)){toast("Enter a valid mobile number (8 to 15 digits)");return}
+ if(a.line.length<5){toast("Enter your house number and street");return}
+ if(a.city.length<2){toast("Enter your city");return}
+ if(a.state.length<2){toast("Enter your state");return}
+ if(!PIN_RE.test(a.pin)){toast("PIN code must be 6 digits");return}
+ const P=DB.patient;P.addr=a;if(!P.phone)P.phone=a.phone;
+ if(P.pin!==a.pin){P.pin=a.pin;P.loc=null;if(S.geoFail)delete S.geoFail[a.pin]}
+ S.addrEdit=false;save();toast("Address saved");render()
+}
+const trackLate=o=>o.status!=="delivered"&&o.eta&&Date.now()>new Date(o.eta).getTime();
+function trackHtml(o){
+ const at=k=>{const x=(o.track||[]).find(y=>y.s===k);return x?" · "+fd(x.t):""},rk={placed:0,dispatched:1,delivered:2}[o.status]||0;
+ const st=[["placed","Ordered"],["dispatched","Dispatched"+(o.courier?" with "+E(o.courier):"")+(o.awb?", tracking no. "+E(o.awb):"")],["delivered","Delivered"]];
+ return `<ol class="sm" aria-label="Order tracking" style="list-style:none;padding:0;margin:6px 0">${st.map((x,k)=>`<li${k===rk?' aria-current="step"':""}><span aria-hidden="true">${k<=rk?"●":"○"}</span> ${k<=rk?"<b>"+x[1]+"</b>":'<span class="mu">'+x[1]+"</span>"}${k<=rk?at(x[0]):""}</li>`).join("")}</ol>${trackLate(o)?`<span class="tag w">Running later than estimated</span>`:""}`
+}
 function shipHtml(r){
  const plan=planFor(aggr(r.meds));
  const lines=pc=>pc.items.map(it=>E(prod(it.pid).name)+" × "+it.qty).join(", ");
@@ -109,18 +137,18 @@ VIEWS["patient.meds"]=()=>{
  const rxs=DB.rx.filter(r=>r.meds.length).reverse(),P=DB.patient||{};
  const cat=DB.products.filter(p=>p.status==="approved"&&sup(p.sup).status==="verified");
  const ordered=r=>DB.orders.some(o=>o.rx===r.id)||DB.backorders.some(b=>b.rx===r.id);
- const need=rxs.some(r=>!ordered(r))&&!(P.pin||P.loc);
+ const aok=addrOk(P.addr);
  setTimeout(nearEnsure,0);
  return `<h2>Medicines</h2><div class="note"><b>Prescription needed</b>Medicines are sold only against a prescription from a registered doctor. The catalogue below is view-only until your doctor prescribes.</div>
- ${need?pinAsk():""}
+ ${rxs.length?addrCard():""}
  ${rxs.map(r=>{const done=DB.orders.filter(o=>o.rx===r.id),bo=DB.backorders.filter(b=>b.rx===r.id&&b.status==="waiting");
-  const sh=!ordered(r)&&(P.pin||P.loc)?shipHtml(r):null;
+  const sh=!ordered(r)&&aok?shipHtml(r):null;
   return `<div class="card"><h3>From ${E(doc(r.doctor).name)} · ${fd(r.when)}</h3><table><tr><th>Product</th><th>Doctor's dose</th><th>Qty</th><th>Price</th></tr>${r.meds.map(m=>{const p=prod(m.pid);return `<tr><td>${E(p.name)}<br><span class="tag g">GMP verified</span> <span class="mu sm">${E(sup(p.sup).name)} · batch ${E(p.batch)}</span></td><td>${E(m.dose)}</td><td>${m.qty}</td><td>${inr(p.price*m.qty)}</td></tr>`}).join("")}</table>
   <p><b>Medicines ${inr(rxTotal(r))}</b></p>
   ${sh?sh.html:""}
-  ${done.length?done.map(o=>`<div class="fl" style="border-top:1px solid var(--ln);padding:8px 0"><span class="sm" style="flex:1"><b>${o.n>1?"Parcel "+o.i+" of "+o.n:"Your parcel"}</b> from ${E(sup(o.sup).name.split(" (")[0])} <span class="tag ${o.status==="delivered"?"g":"a"}">${E(o.status)}</span><br>${o.items.map(i=>E(prod(i.pid).name)+" × "+i.qty).join(", ")}<br><span class="mu">${o.status==="delivered"?"Delivered":(o.eta?"Expected by "+fd(o.eta)+" (estimated, "+o.lo+" to "+o.hi+" days after "+(o.late?"restock":"ordering")+")":"")}${o.ship?" · shipping "+inr(o.ship):""}</span></span>${billBtn("o",o.id)}</div>`).join(""):""}
+  ${done.length?done.map(o=>`<div class="fl" style="border-top:1px solid var(--ln);padding:8px 0"><span class="sm" style="flex:1"><b>${o.n>1?"Parcel "+o.i+" of "+o.n:"Your parcel"}</b> from ${E(sup(o.sup).name.split(" (")[0])} <span class="tag ${o.status==="delivered"?"g":"a"}">${E(o.status)}</span><br>${o.items.map(i=>E(prod(i.pid).name)+" × "+i.qty).join(", ")}<br><span class="mu">${o.status==="delivered"?"Delivered":(o.eta?"Expected by "+fd(o.eta)+" (estimated, "+o.lo+" to "+o.hi+" days after "+(o.late?"restock":"ordering")+")":"")}${o.ship?" · shipping "+inr(o.ship):""}</span>${trackHtml(o)}</span>${billBtn("o",o.id)}</div>`).join(""):""}
   ${bo.map(b=>`<p class="warn sm"><b>Waiting for stock:</b> ${b.items.map(i=>E(prod(i.pid).name)+" × "+i.qty).join(", ")}. We will ship it automatically when it is back in stock.</p>`).join("")}
-  ${!ordered(r)?`<button class="btn s" ${sh&&sh.plan.parcels.length+sh.plan.back.length?"":"disabled"} onclick="NC.placeOrder('${r.id}')">Place order (mock payment)${sh?" · "+inr(sh.plan.grand):""}</button>`:""}</div>`}).join("")||`<div class="card"><p class="mu">No prescription yet. Book a doctor first.</p></div>`}
+  ${!ordered(r)&&!aok?`<p class="mu sm">Add your delivery address above to see delivery dates and order.</p>`:""}${!ordered(r)?`<button class="btn s" ${sh&&sh.plan.parcels.length+sh.plan.back.length?"":"disabled"} onclick="NC.placeOrder('${r.id}')">Place order (mock payment)${sh?" · "+inr(sh.plan.grand):""}</button>`:""}</div>`}).join("")||`<div class="card"><p class="mu">No prescription yet. Book a doctor first.</p></div>`}
  <details class="card"><summary><b>Verified catalogue (view only)</b></summary><p class="mu sm">Every product here comes from a supplier whose licence, GMP certificate and batch test report were checked by admin.</p>
  <table><tr><th>Product</th><th>Supplier</th><th>Price</th></tr>${cat.map(p=>`<tr><td>${E(p.name)}<br><span class="mu sm">${E(p.form)}</span></td><td class="sm">${E(sup(p.sup).name)}</td><td>${inr(p.price)}</td></tr>`).join("")}</table></details>`;
 };
@@ -130,7 +158,7 @@ function placeOrder(rid){
  const bad=r.meds.find(m=>{const p=prod(m.pid);return !p||p.status!=="approved"||sup(p.sup).status!=="verified"||(p.hm&&!p.ht)});
  if(bad){toast("A product on this prescription is not approved, so the order cannot be placed");return}
  if(DB.orders.some(o=>o.rx===rid)||DB.backorders.some(b=>b.rx===rid)){toast("This prescription has already been ordered");return}
- if(!(P.pin||P.loc)){toast("Add your PIN code first so we can work out delivery");return}
+ if(!addrOk(P.addr)){toast("Add your delivery address first");return}
  const plan=planFor(aggr(r.meds));
  makeOrders(rid,plan,false);
  if(plan.back.length)DB.backorders.push({id:uid(),rx:rid,items:plan.back.map(x=>({pid:x.pid,qty:x.qty})),when:new Date().toISOString(),status:"waiting"});
@@ -214,7 +242,7 @@ function billFor(k,id){
   return Object.assign(b,{no:billNo(k,x),title:x.review?"Follow-up consultation":"Online consultation",date:x.when,provider:d.name||"Doctor",provReg:d.regno?"Council registration no. "+d.regno:"",extra:"Appointment slot: "+x.slot,lines:[{d:(x.review?"Follow-up consultation":"Online consultation")+", "+x.slot,q:1,u:x.fee,a:x.fee}],total:x.fee,pay:"Paid online (mock payment, no real money was taken)"})}
  if(k==="o"){const x=DB.orders.find(y=>y.id===id);if(!x)return null;const s=sup(x.sup)||{};
   const lines=x.items.map(i=>{const p=prod(i.pid)||{};return {d:(p.name||"Item")+(p.batch?" (batch "+p.batch+")":""),q:i.qty,u:p.price||0,a:(p.price||0)*i.qty}});if(x.ship)lines.push({d:"Shipping"+(x.n>1?" (parcel "+x.i+" of "+x.n+")":""),q:1,u:x.ship,a:x.ship});
-  return Object.assign(b,{no:billNo(k,x),title:"Medicines order",date:x.when,provider:s.name||"Supplier",provReg:s.licence?"Drug licence no. "+s.licence:"",extra:(x.n>1?"Parcel "+x.i+" of "+x.n+". ":"")+"Order status: "+x.status+(x.eta?". Estimated arrival "+fd(x.eta):""),lines,total:lines.reduce((t,l)=>t+l.a,0),pay:"Paid online (mock payment, no real money was taken)"})}
+  return Object.assign(b,{no:billNo(k,x),title:"Medicines order",date:x.when,provider:s.name||"Supplier",provReg:s.licence?"Drug licence no. "+s.licence:"",extra:(x.n>1?"Parcel "+x.i+" of "+x.n+". ":"")+"Order status: "+x.status+(x.eta?". Estimated arrival "+fd(x.eta):"")+(x.awb?". Courier "+x.courier+", tracking no. "+x.awb:""),shipTo:x.to&&addrOk(x.to)?x.to.name+", "+addrLine(x.to):"",lines,total:lines.reduce((t,l)=>t+l.a,0),pay:"Paid online (mock payment, no real money was taken)"})}
  if(k==="t"){const x=DB.tbook.find(y=>y.id===id);if(!x)return null;const c=cli(x.clinic)||{};
   const lines=x.items.map(i=>({d:i.name+", "+i.sessions+(i.sessions>1?" sessions":" session"),q:i.sessions,u:i.price,a:i.price*i.sessions}));
   return Object.assign(b,{no:billNo(k,x),title:"Clinic treatment",date:x.when,provider:c.name||"Clinic",provReg:c.regno?"Clinic registration no. "+c.regno:"",extra:"Treatment start date: "+x.date,lines,total:lines.reduce((t,l)=>t+l.a,0),pay:"To be paid at the clinic. Nothing has been paid yet."})}
@@ -232,7 +260,7 @@ function billPages(b){
  const dn=n=>{y-=n;if(y<70){np();}};
  np();
  t("F2",20,50,"Nidana Care");t("F1",10,400,"RECEIPT");y-=14;t("F1",8,50,"Prototype receipt: sample data, not a tax invoice, not medical advice.");y-=10;rule();y-=18;
- [["Bill no.",b.no],["Date",new Date(b.date).toLocaleDateString("en-IN",{day:"numeric",month:"long",year:"numeric"})],["Type",b.title],["Patient",b.patient+(b.phone?" ("+b.phone+")":"")],["Provider",b.provider],b.provReg?["",b.provReg]:null,b.extra?["",b.extra]:null].filter(Boolean).forEach(r=>{t("F2",10,50,r[0]);t("F1",10,130,r[1]);dn(15)});
+ [["Bill no.",b.no],["Date",new Date(b.date).toLocaleDateString("en-IN",{day:"numeric",month:"long",year:"numeric"})],["Type",b.title],["Patient",b.patient+(b.phone?" ("+b.phone+")":"")],["Provider",b.provider],b.provReg?["",b.provReg]:null,b.shipTo?["Deliver to",b.shipTo]:null,b.extra?["",b.extra]:null].filter(Boolean).forEach(r=>{wrapTxt(r[1],78).forEach((ln,k)=>{if(!k)t("F2",10,50,r[0]);t("F1",10,130,ln);dn(15)})});
  y-=6;rule();y-=16;
  const D=44,col=(d,q,u,a)=>d.padEnd(D)+" "+String(q).padStart(3)+" "+u.padStart(11)+" "+a.padStart(12);
  t("F4",9,50,col("Description","Qty","Rate","Amount"));dn(8);rule();dn(13);
