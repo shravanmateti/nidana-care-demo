@@ -65,3 +65,5 @@ table.stk td:empty{display:none}
 .rxbar{margin-top:10px}
 .auth{max-width:520px;margin:14px auto 0}.auth input{width:100%}.auth label{display:block;margin-bottom:8px}
 .acct{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:space-between;font-size:13px;margin-top:6px}
+
+a.btn.dir{display:inline-flex;align-items:center;text-decoration:none;box-sizing:border-box}

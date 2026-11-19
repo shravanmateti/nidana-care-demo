@@ -139,9 +139,10 @@ function onboardDoc(){
  mkLogin("doctor",id,n,e);save();toast("Doctor onboarded. Registration is pending verification.");S.fold.ad_doc=true;render()
 }
 function onboardClinic(){
- const n=val("ob_cn"),city=val("ob_cc"),st=val("ob_cs"),rg=val("ob_cr"),dn=val("ob_cd"),dr=val("ob_cp"),e=val("ob_ce").toLowerCase(),ph=val("ob_cph"),ad=val("ob_ca");
+ const n=val("ob_cn"),city=val("ob_cc"),pin=val("ob_cz"),st=val("ob_cs"),rg=val("ob_cr"),dn=val("ob_cd"),dr=val("ob_cp"),e=val("ob_ce").toLowerCase(),ph=val("ob_cph"),ad=val("ob_ca");
  if(n.length<3){toast("Enter the clinic name");return}
  if(city.length<2){toast("Enter the city");return}
+ if(!/^[1-9]\d{5}$/.test(pin)){toast("Enter the clinic's 6-digit PIN code");return}
  if(rg.length<5){toast("Enter the state clinic registration number");return}
  if(dn.length<3||dr.length<4){toast("Enter the BAMS physician in charge and their registration number");return}
  const er=obCheck(e,ph);if(er){toast(er);return}
@@ -149,8 +150,8 @@ function onboardClinic(){
  const treat={};let bad=false;Object.keys(PROC_INFO).forEach((t,i)=>{if(($("obt_"+i)||{}).checked){const pr=parseInt(val("obp_"+i),10);if(!(pr>0&&pr<=100000))bad=true;else treat[t]=pr}});
  if(bad){toast("Give each ticked treatment a price between 1 and 100000");return}
  if(!Object.keys(treat).length){toast("Tick at least one treatment the clinic offers");return}
- const id="c"+uid();DB.clinics.push({id,name:n,city,state:st,regno:rg,physician:dn,physReg:dr,email:e,phone:ph,address:ad,treat,score:0,last:new Date().toISOString(),status:"pending",since:new Date().toISOString()});
- mkLogin("clinic",id,n,e);save();toast("Clinic onboarded. Record an audit before it can take bookings.");S.fold.ad_aud=true;render()
+ const id="c"+uid();DB.clinics.push({id,name:n,city,pin,state:st,regno:rg,physician:dn,physReg:dr,email:e,phone:ph,address:ad,treat,score:0,last:new Date().toISOString(),status:"pending",since:new Date().toISOString()});
+ mkLogin("clinic",id,n,e);geoPin(pin).then(g=>{if(g)save()});save();toast("Clinic onboarded. Record an audit before it can take bookings.");S.fold.ad_aud=true;render()
 }
 VIEWS["admin.onboard"]=()=>{
  const cr=S.cred,pendD=DB.doctors.filter(x=>x.reg!=="verified").length,pendS=DB.suppliers.filter(x=>x.status==="pending").length,pendC=DB.clinics.filter(x=>x.status==="pending").length;
@@ -166,7 +167,7 @@ VIEWS["admin.onboard"]=()=>{
   <label class="ck"><input type="checkbox" id="ob_sr"><span>Batch test report received (optional now)</span></label>
   <p class="mu sm">The licence number is required. Missing documents keep the supplier in the verification queue until they are provided.</p>
   <button class="btn" onclick="NC.onboardSup()">Onboard supplier</button>`,true)}
- ${fold("ob_cli","Onboard a clinic",`<div class="grid" style="gap:8px">${f("ob_cn","Clinic name")}${f("ob_cc","City")}${f("ob_cs","State")}${f("ob_cr","State clinic registration number")}${f("ob_cd","BAMS physician in charge")}${f("ob_cp","Physician registration number")}${f("ob_ce","Contact email","name@clinic.com","email")}${f("ob_cph","Contact phone","","tel")}${f("ob_ca","Address (optional)")}</div>
+ ${fold("ob_cli","Onboard a clinic",`<div class="grid" style="gap:8px">${f("ob_cn","Clinic name")}${f("ob_cc","City")}${f("ob_cz","PIN code","6 digits")}${f("ob_cs","State")}${f("ob_cr","State clinic registration number")}${f("ob_cd","BAMS physician in charge")}${f("ob_cp","Physician registration number")}${f("ob_ce","Contact email","name@clinic.com","email")}${f("ob_cph","Contact phone","","tel")}${f("ob_ca","Address (optional)")}</div>
   <p class="sm" style="margin-top:8px"><b>Treatments offered and prices</b></p>${procs}
   <p class="mu sm">A new clinic cannot take bookings until you record an SOP audit scoring 80% or more under Verification.</p>
   <button class="btn" onclick="NC.onboardClinic()">Onboard clinic</button>`,false)}
@@ -176,5 +177,5 @@ function dismissCred(){S.cred=null;render()}
 VIEWS["admin.cat"]=()=>catView(DB,inr);
 const _done=window.onAssessmentDone;window.onAssessmentDone=s=>{_done(s);startedThisRun0=false;maxReach=-1;
  const m=DB.metrics;m.reach=m.reach||[];if(Q.length){m.reach[Q.length]=(m.reach[Q.length]||0)}save()};
-return {get DB(){return DB},authTab,sendReset,doReset,changePw,pwToggle,adminReset,certPick,rejectDoc,doLogin,doRegister,demoMode,logout,onboardSup,onboardClinic,onboardDoc,dismissCred,foldSet,rejectProd,nextGo,render,setRole,setTab,setStage,goto,setCtx,reqLead,pickSlot,confirmBook,placeOrder,bookClinic,logFollow,setRemind,bookReview,openCase,closeCase,dr,drTest,drAddMed,drDelMed,pickAgree,drOtherTest,drAddTreat,drDelTreat,issueRx,markLead,pickPlan,submitSup,addProduct,setOrder,setBooking,saveAudit,verifyDoc,approveSup,approveProd,recordAudit,saveSettings,resetAll,sim};
+return {get DB(){return DB},dlBill,setPin,useLoc,forgetLoc,authTab,sendReset,doReset,changePw,pwToggle,adminReset,certPick,rejectDoc,doLogin,doRegister,demoMode,logout,onboardSup,onboardClinic,onboardDoc,dismissCred,foldSet,rejectProd,nextGo,render,setRole,setTab,setStage,goto,setCtx,reqLead,pickSlot,confirmBook,placeOrder,bookClinic,logFollow,setRemind,bookReview,openCase,closeCase,dr,drTest,drAddMed,drDelMed,pickAgree,drOtherTest,drAddTreat,drDelTreat,issueRx,markLead,pickPlan,submitSup,addProduct,setOrder,setBooking,saveAudit,verifyDoc,approveSup,approveProd,recordAudit,saveSettings,resetAll,sim};
 })();

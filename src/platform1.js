@@ -51,7 +51,7 @@ function seed(){
  };
 }
 let DB;
-function load(){try{const s=localStorage.getItem(LS);if(s){const d=JSON.parse(s);if(!d.users)d.users=seedUsers();if(d.session===undefined)d.session=null;return d}}catch(e){}return seed()}
+function load(){try{const s=localStorage.getItem(LS);if(s){const d=JSON.parse(s);if(!d.users)d.users=seedUsers();if(d.session===undefined)d.session=null;(d.clinics||[]).forEach(c=>{const l=CAT_LOC[c.id];if(l&&!c.pin)Object.assign(c,l)});return d}}catch(e){}return seed()}
 function save(){try{localStorage.setItem(LS,JSON.stringify(DB))}catch(e){}}
 DB=load();
 try{if(/[?&]demo=1/.test(location.search)&&!DB.session)DB.session={demo:true}}catch(e){}
@@ -166,7 +166,8 @@ function authHtml(){
  <div class="pills" role="tablist"><button class="${reg?"":"on"}" onclick="NC.authTab('login')">Log in</button><button class="${reg?"on":""}" onclick="NC.authTab('register')">Register as a patient</button></div>
  <div class="card" style="margin-top:12px">
  ${reg?`<label class="sm">Full name<br><input id="rg_n" autocomplete="name" placeholder="Full name"></label>
- <label class="sm">Mobile number<br><input id="rg_p" inputmode="tel" autocomplete="tel" placeholder="Mobile number"></label>`:""}
+ <label class="sm">Mobile number<br><input id="rg_p" inputmode="tel" autocomplete="tel" placeholder="Mobile number"></label>
+ <label class="sm">PIN code (optional, so we can show clinics near you)<br><input id="rg_z" inputmode="numeric" maxlength="6" autocomplete="postal-code" placeholder="6-digit PIN code"></label>`:""}
  <label class="sm">Email<br><input id="${reg?"rg_e":"lg_e"}" type="email" autocomplete="email" placeholder="Email address"></label>
  <label class="sm">Password${reg?" (8 or more characters, letters and a number)":""}<br><input id="${reg?"rg_w":"lg_w"}" type="password" autocomplete="${reg?"new-password":"current-password"}" placeholder="Password"></label>
  ${reg?`<label class="sm">Confirm password<br><input id="rg_w2" type="password" autocomplete="new-password" placeholder="Confirm password"></label>
@@ -187,16 +188,17 @@ function doLogin(){
  a.fails=0;a.err="";DB.session={uid:U.id};S.pwOpen=!!U.tmp;S.pwErr="";save();enterAs(U);render();scrollTo(0,0);toast(U.tmp?"Please set your own password":"Welcome, "+U.name)
 }
 function doRegister(){
- const n=($("rg_n").value||"").trim(),p=($("rg_p").value||"").trim(),e=($("rg_e").value||"").trim().toLowerCase(),w=$("rg_w").value||"",w2=$("rg_w2").value||"";
+ const n=($("rg_n").value||"").trim(),p=($("rg_p").value||"").trim(),z=($("rg_z").value||"").trim(),e=($("rg_e").value||"").trim().toLowerCase(),w=$("rg_w").value||"",w2=$("rg_w2").value||"";
  if(n.length<2){authErr("Enter your full name.");return}
  if(!okPhone(p)){authErr("Enter a valid mobile number (8 to 15 digits).");return}
  if(!okEmail(e)){authErr("Enter a valid email address.");return}
+ if(z&&!/^[1-9]\d{5}$/.test(z)){authErr("PIN code must be 6 digits, or leave it empty.");return}
  if(!okPw(w)){authErr("Password needs 8 or more characters with letters and a number.");return}
  if(w!==w2){authErr("The two passwords do not match.");return}
  if(!$("rg_a").checked||!$("rg_c").checked){authErr("Please tick both boxes to continue.");return}
  if(DB.users.some(u=>u.email===e)){authErr("An account with this email already exists. Log in instead.");return}
  const U={id:uid(),role:"patient",ref:"",name:n,email:e,ph:hpw(e,w)};DB.users.push(U);
- DB.patient={name:n,phone:p};DB.session={uid:U.id};S.auth.err="";save();enterAs(U);render();scrollTo(0,0);toast("Account created")
+ DB.patient={name:n,phone:p,pin:z,loc:null};DB.session={uid:U.id};S.auth.err="";save();enterAs(U);render();scrollTo(0,0);toast("Account created")
 }
 function demoMode(){DB.session={demo:true};save();S.auth.err="";render()}
 function logout(){DB.session=null;S.auth={tab:"login",err:"",fails:0,until:0};S.cred=null;S.pwOpen=false;save();render();scrollTo(0,0)}

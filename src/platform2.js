@@ -40,7 +40,7 @@ VIEWS["patient.care"]=()=>{
   ${r.advice?`<p class="sm"><b>Advice:</b> ${E(r.advice)}</p>`:""}
   <p class="sm"><b>Follow-up:</b> ${fd(r.follow)}</p>
   <div class="fl">${r.meds.length&&S.stage>=2?`<button class="btn s" onclick="NC.goto('patient','meds')">Order medicines</button>`:""}${r.treat.length&&S.stage>=3?`<button class="btn s" onclick="NC.goto('patient','clinic')">Book clinic treatment</button>`:""}<button class="btn g s" onclick="NC.goto('patient','follow')">Follow-up</button></div>`
-  :`<p class="mu sm">Waiting for the consultation. Your doctor will add a prescription after the call.</p>`}</div>`}).join(""):`<div class="card"><p>No appointments yet.</p></div>`}
+  :`<p class="mu sm">Waiting for the consultation. Your doctor will add a prescription after the call.</p>`}<div class="fl" style="margin-top:6px">${billBtn("a",ap.id)}</div></div>`}).join(""):`<div class="card"><p>No appointments yet.</p></div>`}
  <div class="card"><h3>Records</h3><p class="mu sm">Your assessments, kept so every doctor sees the history.</p><ul class="sm">${hist||"<li>None yet</li>"}</ul></div>`;
 };
 VIEWS["patient.meds"]=()=>{
@@ -50,7 +50,7 @@ VIEWS["patient.meds"]=()=>{
  ${rxs.map(r=>{const done=DB.orders.filter(o=>o.rx===r.id);
   return `<div class="card"><h3>From ${E(doc(r.doctor).name)} · ${fd(r.when)}</h3><table><tr><th>Product</th><th>Doctor's dose</th><th>Qty</th><th>Price</th></tr>${r.meds.map(m=>{const p=prod(m.pid);return `<tr><td>${E(p.name)}<br><span class="tag g">GMP verified</span> <span class="mu sm">${E(sup(p.sup).name)} · batch ${E(p.batch)}</span></td><td>${E(m.dose)}</td><td>${m.qty}</td><td>${inr(p.price*m.qty)}</td></tr>`}).join("")}</table>
   <p><b>Total ${inr(rxTotal(r))}</b></p>
-  ${done.length?done.map(o=>`<span class="tag a">${E(sup(o.sup).name.split(" (")[0])}: ${E(o.status)}</span>`).join(" "):`<button class="btn s" onclick="NC.placeOrder('${r.id}')">Place order (mock payment)</button>`}</div>`}).join("")||`<div class="card"><p class="mu">No prescription yet. Book a doctor first.</p></div>`}
+  ${done.length?done.map(o=>`<span class="tag a">${E(sup(o.sup).name.split(" (")[0])}: ${E(o.status)}</span> ${billBtn("o",o.id)}`).join(" "):`<button class="btn s" onclick="NC.placeOrder('${r.id}')">Place order (mock payment)</button>`}</div>`}).join("")||`<div class="card"><p class="mu">No prescription yet. Book a doctor first.</p></div>`}
  <details class="card"><summary><b>Verified catalogue (view only)</b></summary><p class="mu sm">Every product here comes from a supplier whose licence, GMP certificate and batch test report were checked by admin.</p>
  <table><tr><th>Product</th><th>Supplier</th><th>Price</th></tr>${cat.map(p=>`<tr><td>${E(p.name)}<br><span class="mu sm">${E(p.form)}</span></td><td class="sm">${E(sup(p.sup).name)}</td><td>${inr(p.price)}</td></tr>`).join("")}</table></details>`;
 };
@@ -63,17 +63,130 @@ function placeOrder(rid){
  save();toast("Order placed (mock)");render();scrollTo(0,0);
 }
 VIEWS["patient.clinic"]=()=>{
- const rxs=DB.rx.filter(r=>r.treat.length).reverse();
- if(!rxs.length)return `<h2>Clinic treatment</h2><div class="card"><p class="mu">No clinic treatment has been advised yet. Your doctor decides if you need one.</p></div>`;
- const r=rxs[0],done=DB.tbook.find(b=>b.rx===r.id);
- return `<h2>Clinic treatment</h2><div class="card"><h3>Advised by ${E(doc(r.doctor).name)}</h3><ul class="sm">${r.treat.map(t=>`<li>${E(t.name)} × ${t.sessions} sessions</li>`).join("")}</ul></div>
- ${done?`<div class="good">Booked at ${E(cli(done.clinic).name)} on ${E(done.date)}. Total ${inr(done.total)} (pay at clinic).</div>`:`<p class="sm mu">Audited clinics that offer every advised treatment are shown first.</p><div class="grid">${DB.clinics.slice().sort((x,y)=>{const f=c=>(c.status==="audited"&&r.treat.every(t=>c.treat[t.name]))?0:1;return f(x)-f(y)||y.score-x.score}).map(c=>{
-  const ok=c.status==="audited",lines=r.treat.map(t=>({n:t.name,s:t.sessions,p:c.treat[t.name]}));const off=lines.every(l=>l.p),tot=lines.reduce((x,l)=>x+(l.p||0)*l.s,0);
-  return `<div class="card"><h3>${E(c.name)}</h3><p class="sm">SOP audit score <b>${c.score}%</b> · last audit ${lastTxt(c)}</p>
-  ${ok?`<span class="tag g">Audited partner</span>`:`<span class="tag w">Not bookable: audit score below 80%</span>`}
+ const rxs=DB.rx.filter(r=>r.treat.length).reverse(),r=rxs[0],done=r&&DB.tbook.find(b=>b.rx===r.id),P=DB.patient;
+ setTimeout(nearEnsure,0);
+ if(done)return `<h2>Clinic treatment</h2><div class="good">Booked at ${E(cli(done.clinic).name)} on ${E(done.date)}. Total ${inr(done.total)} (pay at clinic).<div class="fl" style="margin-top:8px">${billBtn("t",done.id)}</div></div>`;
+ const rank=nearRank(DB.clinics.slice(),r);
+ return `${r?`<h2>Clinic treatment</h2><div class="card"><h3>Advised by ${E(doc(r.doctor).name)}</h3><ul class="sm">${r.treat.map(t=>`<li>${E(t.name)} × ${t.sessions} sessions</li>`).join("")}</ul></div>`:`<h2>Clinics near you</h2><p class="mu sm">Your doctor will tell you if you need a clinic treatment. Until then, this is a view-only list.</p>`}
+ ${nearCard()}
+ ${r?`<p class="sm mu">Audited clinics that offer every advised treatment are shown first, then the nearest.</p>`:""}<div class="grid">${rank.map(x=>{const c=x.c;
+  const ok=c.status==="audited";
+  const head=`<h3>${E(c.name)}</h3><p class="sm">${nearTxt(x)}${c.city?" · "+E(c.city):""}${c.pin?" · PIN "+E(c.pin):""}<br>SOP audit score <b>${c.score}%</b> · last audit ${lastTxt(c)}</p>${ok?`<span class="tag g">Audited partner</span>`:`<span class="tag w">Not bookable: audit score below 80%</span>`} <div style="margin-top:8px"><a class="btn g s dir" href="${mapsUrl(c)}" target="_blank" rel="noopener">Directions in Google Maps</a></div>`;
+  if(!r)return `<div class="card">${head}<p class="sm">Offers ${Object.keys(c.treat).length} treatments.</p></div>`;
+  const lines=r.treat.map(t=>({n:t.name,s:t.sessions,p:c.treat[t.name]}));const off=lines.every(l=>l.p),tot=lines.reduce((y,l)=>y+(l.p||0)*l.s,0);
+  return `<div class="card">${head}
   <ul class="sm">${lines.map(l=>`<li>${E(l.n)} × ${l.s}: ${l.p?inr(l.p*l.s):"not offered here"}</li>`).join("")}</ul>
-  ${ok&&off?`<div class="fl"><label class="sm">Date <input type="date" id="bd_${c.id}" value="${isoDay(addDays(new Date(),1))}" min="${isoDay(new Date())}"></label><button class="btn s" onclick="NC.bookClinic('${r.id}','${c.id}')">Book · ${inr(tot)}</button></div>`:""}</div>`}).join("")}</div>`}`;
+  ${ok&&off?`<div class="fl"><label class="sm">Date <input type="date" id="bd_${c.id}" value="${isoDay(addDays(new Date(),1))}" min="${isoDay(new Date())}"></label><button class="btn s" onclick="NC.bookClinic('${r.id}','${c.id}')">Book · ${inr(tot)}</button></div>`:""}</div>`}).join("")}</div>`;
 };
+/* ---------- clinics near the patient: PIN code or device location, no paid map service ---------- */
+const PIN_RE=/^[1-9]\d{5}$/;
+const rad=x=>x*Math.PI/180;
+const kmBetween=(a,b)=>{const dl=rad(b.lat-a.lat),dn=rad(b.lng-a.lng),q=Math.sin(dl/2)**2+Math.cos(rad(a.lat))*Math.cos(rad(b.lat))*Math.sin(dn/2)**2;return 12742*Math.asin(Math.sqrt(q))};
+async function getJ(url){const c=new AbortController(),t=setTimeout(()=>c.abort(),6000);try{const r=await fetch(url,{signal:c.signal,headers:{Accept:"application/json"}});return r.ok?await r.json():null}catch(e){return null}finally{clearTimeout(t)}}
+async function geoPin(pin){
+ DB.geo=DB.geo||{};const k=DB.geo[pin];if(k&&isFinite(k.lat))return k;
+ let g=null;const ok=a=>a&&a[0]&&isFinite(+a[0].lat)&&isFinite(+a[0].lon);
+ const a=await getJ("https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=in&postalcode="+pin);
+ if(ok(a))g={lat:+a[0].lat,lng:+a[0].lon};
+ if(!g){const b=await getJ("https://api.postalpincode.in/pincode/"+pin),po=b&&b[0]&&b[0].PostOffice&&b[0].PostOffice[0];
+  if(po){const c=await getJ("https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=in&q="+encodeURIComponent([po.Name,po.District,po.State].join(", ")));if(ok(c))g={lat:+c[0].lat,lng:+c[0].lon}}}
+ if(!g)return null;
+ g={lat:Math.round(g.lat*1000)/1000,lng:Math.round(g.lng*1000)/1000};DB.geo[pin]=g;return g
+}
+const clinicLoc=c=>{if(isFinite(c.lat))return {lat:c.lat,lng:c.lng};const g=c.pin&&DB.geo&&DB.geo[c.pin];return g&&isFinite(g.lat)?g:null};
+function nearRank(list,r){
+ const P=DB.patient||{},me=P.loc;
+ const rows=list.map(c=>{const cl=clinicLoc(c);return {c,d:me&&cl?kmBetween(me,cl):null,gap:P.pin&&c.pin?Math.abs(parseInt(P.pin,10)-parseInt(c.pin,10)):1e9}});
+ const grp=x=>r?((x.c.status==="audited"&&r.treat.every(t=>x.c.treat[t.name]))?0:1):0;
+ const known=me||P.pin;
+ return rows.sort((x,y)=>grp(x)-grp(y)||(known?((x.d==null)-(y.d==null)||(x.d!=null?x.d-y.d:x.gap-y.gap)):0)||y.c.score-x.c.score)
+}
+function nearTxt(x){
+ const P=DB.patient||{};
+ if(x.d!=null)return `<b>about ${x.d<10?x.d.toFixed(1):Math.round(x.d)} km away</b> (straight line)`;
+ if(P.pin&&x.c.pin)return String(P.pin).slice(0,3)===String(x.c.pin).slice(0,3)?"<b>in your PIN area</b>":"distance not available";
+ return "";
+}
+const mapsUrl=c=>"https://www.google.com/maps/dir/?api=1&destination="+encodeURIComponent([String(c.name).replace(/ \(sample\)/,""),c.address||"",c.city||"",c.pin||""].filter(Boolean).join(", "));
+function nearCard(){
+ const P=DB.patient||{},me=P.loc,fail=P.pin&&!me&&S.geoFail&&S.geoFail[P.pin];
+ const st=me?`Showing the nearest first, from ${me.src==="device"?"your device location":"PIN "+E(P.pin)}.`:P.pin?(fail?"Could not look up that PIN online, so clinics are ordered by how close their PIN number is. Try 'Use my location' for distances.":"Looking up your PIN…"):"Enter your PIN code or use your location to see the nearest clinics first.";
+ return `<div class="card"><h3>Clinics near you</h3><div class="fl"><input id="np" inputmode="numeric" maxlength="6" placeholder="Your PIN code" aria-label="Your PIN code" value="${E(P.pin||"")}" style="width:140px"><button class="btn s" onclick="NC.setPin()">Find clinics</button><button class="btn g s" onclick="NC.useLoc()">Use my location</button>${P.pin||me?`<button class="btn g s" onclick="NC.forgetLoc()">Clear</button>`:""}</div>
+ <p class="sm" id="nearSt" role="status">${st}</p><p class="mu sm">Free to use. Your PIN is sent to OpenStreetMap to find the area; your device location never leaves this browser and is saved only as an approximate point. Distances are straight-line, not road distance.</p></div>`
+}
+let nearBusy=false;
+async function nearEnsure(){
+ if(nearBusy)return;nearBusy=true;let ch=false;S.geoFail=S.geoFail||{};
+ try{const P=DB.patient;
+  if(P.pin&&!P.loc&&!S.geoFail[P.pin]){const g=await geoPin(P.pin);if(g){P.loc={lat:g.lat,lng:g.lng,src:"pin"};ch=true}else{S.geoFail[P.pin]=1;ch=true}}
+  for(const c of DB.clinics){if(!clinicLoc(c)&&c.pin&&!S.geoFail[c.pin]){const g=await geoPin(c.pin);if(g)ch=true;else S.geoFail[c.pin]=1}}
+ }finally{nearBusy=false}
+ if(ch){save();if(S.role==="patient"&&S.tab==="clinic")render()}
+}
+function setPin(){const v=val("np");if(!PIN_RE.test(v)){toast("Enter a 6-digit PIN code");return}const P=DB.patient;P.pin=v;P.loc=null;if(S.geoFail)delete S.geoFail[v];save();render()}
+function useLoc(){
+ if(!navigator.geolocation){toast("This browser cannot share location. Enter your PIN code instead.");return}
+ toast("Asking your browser for your location");
+ navigator.geolocation.getCurrentPosition(p=>{DB.patient.loc={lat:Math.round(p.coords.latitude*100)/100,lng:Math.round(p.coords.longitude*100)/100,src:"device"};save();render()},
+  e=>toast(e&&e.code===1?"Location permission was refused. Enter your PIN code instead.":"Could not get your location. Enter your PIN code instead."),{timeout:8000,maximumAge:600000})
+}
+function forgetLoc(){const P=DB.patient;P.pin="";P.loc=null;save();render()}
+/* ---------- downloadable bills (a real PDF, no libraries, one tap) ---------- */
+const billBtn=(k,id)=>`<button class="btn g s" onclick="NC.dlBill('${k}','${id}')">Download bill (PDF)</button>`;
+const billNo=(k,x)=>"NC-"+k.toUpperCase()+"-"+isoDay(x.when).replace(/-/g,"")+"-"+String(x.id).slice(-4).toUpperCase();
+function billFor(k,id){
+ const P=DB.patient||{},b={patient:P.name||"Patient",phone:P.phone||""};
+ if(k==="a"){const x=DB.appts.find(y=>y.id===id);if(!x)return null;const d=doc(x.doctor)||{};
+  return Object.assign(b,{no:billNo(k,x),title:x.review?"Follow-up consultation":"Online consultation",date:x.when,provider:d.name||"Doctor",provReg:d.regno?"Council registration no. "+d.regno:"",extra:"Appointment slot: "+x.slot,lines:[{d:(x.review?"Follow-up consultation":"Online consultation")+", "+x.slot,q:1,u:x.fee,a:x.fee}],total:x.fee,pay:"Paid online (mock payment, no real money was taken)"})}
+ if(k==="o"){const x=DB.orders.find(y=>y.id===id);if(!x)return null;const s=sup(x.sup)||{};
+  const lines=x.items.map(i=>{const p=prod(i.pid)||{};return {d:(p.name||"Item")+(p.batch?" (batch "+p.batch+")":""),q:i.qty,u:p.price||0,a:(p.price||0)*i.qty}});
+  return Object.assign(b,{no:billNo(k,x),title:"Medicines order",date:x.when,provider:s.name||"Supplier",provReg:s.licence?"Drug licence no. "+s.licence:"",extra:"Order status: "+x.status,lines,total:lines.reduce((t,l)=>t+l.a,0),pay:"Paid online (mock payment, no real money was taken)"})}
+ if(k==="t"){const x=DB.tbook.find(y=>y.id===id);if(!x)return null;const c=cli(x.clinic)||{};
+  const lines=x.items.map(i=>({d:i.name+", "+i.sessions+(i.sessions>1?" sessions":" session"),q:i.sessions,u:i.price,a:i.price*i.sessions}));
+  return Object.assign(b,{no:billNo(k,x),title:"Clinic treatment",date:x.when,provider:c.name||"Clinic",provReg:c.regno?"Clinic registration no. "+c.regno:"",extra:"Treatment start date: "+x.date,lines,total:lines.reduce((t,l)=>t+l.a,0),pay:"To be paid at the clinic. Nothing has been paid yet."})}
+ return null
+}
+const pdfT=s=>String(s==null?"":s).replace(/₹/g,"Rs.").replace(/×/g,"x").replace(/[–—]/g,"-").replace(/[‘’]/g,"'").replace(/[“”]/g,'"').replace(/[^\x20-\x7E]/g,"?");
+const pdfE=s=>pdfT(s).replace(/\\/g,"\\\\").replace(/\(/g,"\\(").replace(/\)/g,"\\)");
+const rs=n=>"Rs."+Math.round(n).toLocaleString("en-IN");
+function wrapTxt(s,n){const o=[];let c="";pdfT(s).split(/\s+/).filter(Boolean).forEach(w=>{while(w.length>n){if(c){o.push(c);c=""}o.push(w.slice(0,n));w=w.slice(n)}if((c?c.length+1:0)+w.length>n){o.push(c);c=w}else c=c?c+" "+w:w});if(c)o.push(c);return o.length?o:[""]}
+function billPages(b){
+ const pages=[];let c="",y=0;
+ const np=()=>{if(c)pages.push(c);c="";y=790};
+ const t=(f,sz,x,s)=>{c+=`BT /${f} ${sz} Tf ${x} ${y} Td (${pdfE(s)}) Tj ET\n`};
+ const rule=()=>{c+=`0.6 w 50 ${y} m 545 ${y} l S\n`};
+ const dn=n=>{y-=n;if(y<70){np();}};
+ np();
+ t("F2",20,50,"Nidana Care");t("F1",10,400,"RECEIPT");y-=14;t("F1",8,50,"Prototype receipt: sample data, not a tax invoice, not medical advice.");y-=10;rule();y-=18;
+ [["Bill no.",b.no],["Date",new Date(b.date).toLocaleDateString("en-IN",{day:"numeric",month:"long",year:"numeric"})],["Type",b.title],["Patient",b.patient+(b.phone?" ("+b.phone+")":"")],["Provider",b.provider],b.provReg?["",b.provReg]:null,b.extra?["",b.extra]:null].filter(Boolean).forEach(r=>{t("F2",10,50,r[0]);t("F1",10,130,r[1]);dn(15)});
+ y-=6;rule();y-=16;
+ const D=44,col=(d,q,u,a)=>d.padEnd(D)+" "+String(q).padStart(3)+" "+u.padStart(11)+" "+a.padStart(12);
+ t("F4",9,50,col("Description","Qty","Rate","Amount"));dn(8);rule();dn(13);
+ b.lines.forEach(l=>{const w=wrapTxt(l.d,D);w.forEach((x,i)=>{t("F3",9,50,i?x:col(x,l.q,rs(l.u),rs(l.a)));dn(12)})});
+ dn(0);rule();dn(16);t("F4",9,50,col("TOTAL","","",rs(b.total)));dn(22);
+ t("F2",10,50,"Payment");dn(14);wrapTxt(b.pay,95).forEach(x=>{t("F1",10,50,x);dn(13)});
+ dn(10);wrapTxt("This receipt was generated by a prototype for demonstration. No real payment was collected and no goods or services were supplied. Keep it only as a sample.",110).forEach(x=>{t("F1",8,50,x);dn(11)});
+ np();return pages
+}
+function makePdf(pages){
+ const objs=[],add=s=>objs.push(s);
+ add("<< /Type /Catalog /Pages 2 0 R >>");add("");
+ ["Helvetica","Helvetica-Bold","Courier","Courier-Bold"].forEach(f=>add(`<< /Type /Font /Subtype /Type1 /BaseFont /${f} /Encoding /WinAnsiEncoding >>`));
+ const kids=[];
+ pages.forEach(c=>{const pid=objs.length+1;kids.push(pid+" 0 R");add(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R /F4 6 0 R >> >> /Contents ${pid+1} 0 R >>`);add(`<< /Length ${c.length} >>\nstream\n${c}endstream`)});
+ objs[1]=`<< /Type /Pages /Kids [${kids.join(" ")}] /Count ${pages.length} >>`;
+ let out="%PDF-1.4\n";const off=[];
+ objs.forEach((o,i)=>{off.push(out.length);out+=`${i+1} 0 obj\n${o}\nendobj\n`});
+ const xr=out.length;
+ out+=`xref\n0 ${objs.length+1}\n0000000000 65535 f \n`+off.map(o=>String(o).padStart(10,"0")+" 00000 n \n").join("")+`trailer\n<< /Size ${objs.length+1} /Root 1 0 R >>\nstartxref\n${xr}\n%%EOF\n`;
+ return new Blob([out],{type:"application/pdf"})
+}
+function dlBill(k,id){
+ const b=billFor(k,id);if(!b){toast("Could not find that bill");return}
+ const blob=makePdf(billPages(b)),a=document.createElement("a");
+ a.href=URL.createObjectURL(blob);a.download="Nidana-Care-bill-"+b.no+".pdf";document.body.appendChild(a);a.click();
+ setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},3000);toast("Bill downloaded")
+}
 function bookClinic(rid,cid){
  const r=DB.rx.find(x=>x.id===rid),c=cli(cid);
  if(c.status!=="audited"){toast("This clinic is not bookable: audit score below 80%");return}

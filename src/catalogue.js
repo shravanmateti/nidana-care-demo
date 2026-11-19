@@ -86,12 +86,14 @@ const PROC_INFO={
  "Raktamokshana (leech therapy)":{ail:["psoriasis","eczema","scalppso"],ref:[CR.psoF],sh:1,note:"CCRAS: leech therapy is indicated in certain patients."}
 };
 const PROCS=Object.keys(PROC_INFO);
+const CAT_LOC={c1:{pin:"682001",lat:9.98,lng:76.28},c2:{pin:"500001",lat:17.39,lng:78.47},c3:{pin:"600001",lat:13.09,lng:80.28}};
 function CAT_CLINICS(addDays){
  const all=(m,x)=>Object.assign({},m,x);
- return [
+ const L=[
  {id:"c1",name:"Vaidyashala Wellness, Kochi (sample)",city:"Kochi",treat:{"Shiro-abhyanga (scalp oil massage)":900,"Shirodhara":1800,"Takradhara":1500,"Nasya (nasal oil therapy)":700,"Abhyanga (whole-body oil massage)":1200,"Udvartana (dry powder massage)":1300,"Patra pinda sweda (leaf bolus fomentation)":1600,"Baluka sweda (sand fomentation)":1100,"Kati basti (lumbar oil pooling)":1400,"Janu basti (knee oil pooling)":1300,"Prishta basti (spine oil pooling)":1500,"Virechana (therapeutic purgation)":6500,"Vamana (therapeutic emesis)":6000},score:92,last:addDays(new Date(),-40),status:"audited"},
  {id:"c2",name:"Charak Ayurveda Centre, Hyderabad (sample)",city:"Hyderabad",treat:{"Shiro-abhyanga (scalp oil massage)":800,"Shirolepa (scalp paste)":1000,"Shirodhara":1600,"Nasya (nasal oil therapy)":600,"Abhyanga (whole-body oil massage)":1000,"Udvartana (dry powder massage)":1100,"Patra pinda sweda (leaf bolus fomentation)":1400,"Jambeera pinda sweda":1500,"Kati basti (lumbar oil pooling)":1200,"Janu basti (knee oil pooling)":1100,"Lekhana basti (scraping enema)":3500,"Raktamokshana (leech therapy)":2500,"Virechana (therapeutic purgation)":5500},score:84,last:addDays(new Date(),-75),status:"audited"},
  {id:"c3",name:"Kesha Care Clinic, Chennai (sample)",city:"Chennai",treat:{"Shirodhara":1700,"Shiro-abhyanga (scalp oil massage)":850,"Abhyanga (whole-body oil massage)":1100,"Udvartana (dry powder massage)":1200},score:68,last:addDays(new Date(),-150),status:"probation"}];
+ L.forEach(c=>Object.assign(c,CAT_LOC[c.id]));return L
 }
 function catRefs(refs){return (refs||[]).map(r=>`<a href="${r[1]}" target="_blank" rel="noopener">${esc(r[0])}</a>`).join("<br>")}
 const catAid=a=>a&&a.sum?(a.sum.kind==="gen"?a.sum.aid:"hair"):"";
