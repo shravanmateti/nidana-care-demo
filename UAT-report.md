@@ -132,3 +132,12 @@ Built: change password (current password required, strength check, must differ);
 Tests: t11 (40 checks) passes, as do t2-t10 and t5.
 
 Limits: no email or SMS, so the reset code appears on the page (a real build must send it and hold it on a server). Passwords are still a demo-only hash in localStorage. The certificate image lives in the browser only, and the admin compares it by eye; there is no lookup against any state council register, no document authenticity or image-tampering check, and PDFs are not accepted.
+
+
+## 11. Round 4: downloadable bills and nearest clinics
+
+Built: a PDF receipt for each consultation, medicine order and clinic booking, one tap from the screen where the patient already sees it; a clinic list ordered by distance from the patient's PIN code or device location, with a Google Maps directions link per clinic. PIN can be given at registration, so the clinic page is already sorted when the patient gets there.
+
+Tests: t12 (40 checks) covers PDF validity (offsets, stream lengths, page count, multi-page), bill contents, PIN and device-location ranking, the offline fallback, refused location permission, registration and onboarding PINs, and phone-width layout. t2-t11 and t5 still pass.
+
+Limits: receipts are not tax invoices (no GST lines or GSTIN; legal review pending); distances are straight-line and PIN lookups depend on free OpenStreetMap coverage, which is patchy for some Indian PINs, so the offline order-by-PIN fallback matters; seeded clinic positions are approximate; the PIN is sent to OpenStreetMap (and India Post for the fallback) and the privacy note on the page says so.
